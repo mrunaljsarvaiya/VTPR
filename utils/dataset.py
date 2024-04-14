@@ -63,6 +63,24 @@ def get_dataloader(data_set_name, batch_size, data_set_dir, test_past_frames = 1
         test_set = BAIRDataset(dataset_dir.joinpath('test'), transform, color_mode = 'RGB', 
                                 num_past_frames = 2, num_future_frames = test_future_frames)()
 
+    elif data_set_name == 'BLOCKS':
+        dataset_dir = Path(data_set_dir)
+        norm_transform = VidNormalize((0.5059, 0.5043, 0.5007), (0.0574, 0.0571, 0.0616))
+        renorm_transform = VidReNormalize((0.5059, 0.5043, 0.5007), (0.0574, 0.0571, 0.0616))
+        #norm_transform = VidNormalize((0.6175636, 0.60508573, 0.52188003), (2.8584306, 2.8212209, 2.499153))
+        #renorm_transform = VidReNormalize((0.6175636, 0.60508573, 0.52188003), (2.8584306, 2.8212209, 2.499153))
+        transform = transforms.Compose([VidToTensor(), norm_transform])
+
+        train_set = VideoFrameDataset(data_path='/home/mrunal/Documents/NYUCourses/DeepLearning/project/VPTR/data/blocks/dataset/unlabeled', transform=transform, num_past_frames=2, num_future_frames=10)
+        train_val_ratio = 0.95
+        train_set_length = int(len(train_set) * train_val_ratio)
+        val_set_length = len(train_set) - train_set_length
+        train_set, val_set = random_split(train_set, [train_set_length, val_set_length],
+                                        generator=torch.Generator().manual_seed(2021))
+
+        # TODO FIX
+        test_set = val_set
+        
     N = batch_size
     train_loader = DataLoader(train_set, batch_size=N, shuffle=True, num_workers=num_workers, drop_last = True)
     val_loader = DataLoader(val_set, batch_size=N, shuffle=True, num_workers=num_workers, drop_last = True)
@@ -337,6 +355,7 @@ class MovingMNISTDataset(Dataset):
             img = transforms.ToPILImage()(full_clip[i, ...])
             imgs.append(img)
         
+
         full_clip = self.transform(imgs)
         past_clip = full_clip[0:clip_index[0, 1], ...]
         future_clip = full_clip[-clip_index[1, 1]:, ...]
@@ -529,3 +548,125 @@ def mean_std_compute(dataset, device, color_mode = 'RGB'):
         std = torch.sqrt(mean_2 - torch.square(mean))
 
         return (mean.cpu().numpy(), std.cpu().numpy())
+
+import os
+import torch
+from torch.utils.data import Dataset, DataLoader
+from torchvision import transforms
+from PIL import Image
+
+import matplotlib.pyplot as plt
+
+def show_frames(frames, title):
+    """ Helper function to display a list of frames """
+    fig, axs = plt.subplots(1, len(frames), figsize=(15, 5))
+    for i, frame in enumerate(frames):
+        axs[i].imshow(transforms.ToPILImage()(frame))
+        axs[i].axis('off')
+    plt.suptitle(title)
+    plt.show()
+
+
+def compute_mean_std(dataloader):
+    # Variables to store sum, square sum, and count of pixels
+    channel_sum, channel_squared_sum, num_batches = 0, 0, 0
+
+    # Loop over the data loader
+    for idx, data in enumerate(dataloader):
+        print(idx)
+        # Unpack data; assuming data['past_clip'] and data['future_clip'] are normalized
+        past_frames, future_frames = data
+        
+        # Combine past and future frames for statistics computation
+        frames = torch.cat((past_frames, future_frames), dim=1)
+        frames = frames.view(-1, frames.size(2), frames.size(3), frames.size(4))
+
+
+        channel_sum += frames.sum(dim=[0, 2, 3])
+        channel_squared_sum += (frames ** 2).sum(dim=[0, 2, 3])
+        num_batches += frames.size(0) * frames.size(2) * frames.size(3)  # Total number of images times W*H0
+
+    mean = channel_sum / num_batches
+    # Standard deviation formula: sqrt(E[X^2] - (E[X])^2)
+    std = torch.abs(channel_squared_sum / num_batches - mean ** 2) ** 0.5
+
+    return mean, std
+
+def find_mean_std_blocks():
+    print("Finding mean and std")
+
+    # Setting up dataset and dataloader
+    transform = transforms.Compose([VidToTensor()])
+
+    dataset = VideoFrameDataset(data_path='/home/mrunal/Documents/NYUCourses/DeepLearning/project/VPTR/data/blocks/dataset/unlabeled', transform=transform, num_past_frames=2, num_future_frames=5)
+    dataloader = DataLoader(dataset, batch_size=5, shuffle=False, num_workers=4)  # Adjust num_workers based on your system
+
+    # Compute mean and std
+    mean, std = compute_mean_std(dataloader)
+    print(f"Mean: {mean}")
+    print(f"Std: {std}")
+
+class VideoFrameDataset(Dataset):
+    def __init__(self, data_path, transform=None, num_past_frames=5, num_future_frames=5):
+        """
+        Args:
+            data_path (str): Path to the directory containing video folders.
+            transform (callable, optional): Optional transform to be applied on a sample.
+            num_past_frames (int): Number of past frames to include in each sample.
+            num_future_frames (int): Number of future frames to include in each sample.
+        """
+        self.data_path = data_path
+        self.transform = transform
+        self.num_past_frames = num_past_frames
+        self.num_future_frames = num_future_frames
+        
+        self.videos = [os.path.join(data_path, v) for v in os.listdir(data_path)]
+        self.frames = []
+        for video in self.videos:
+            frames = sorted([os.path.join(video, frame) for frame in os.listdir(video)])
+            if len(frames) >= num_past_frames + num_future_frames:
+                self.frames.extend([(video, i) for i in range(len(frames) - (num_past_frames + num_future_frames))])
+
+        print(f"Frames {len(self.frames)}")
+
+    def __len__(self):
+        return len(self.frames)
+
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.to_list()
+        
+        video, frame_idx = self.frames[idx]
+        frame_paths = [os.path.join(video, f'image_{frame_idx + i}.png') for i in range(self.num_past_frames + self.num_future_frames)]
+
+        frames = [Image.open(fp).convert('RGB') for fp in frame_paths]
+        frames = self.transform(frames)
+
+        past_clip = frames[0:self.num_past_frames, ...]
+        future_clip = frames[-self.num_future_frames:, ...]
+        
+        return past_clip, future_clip
+
+# find_mean_std_blocks()
+
+# if __name__ == '__main__':
+#     transform = transforms.Compose([
+#         transforms.Resize((224, 224)),
+#         transforms.ToTensor()
+#     ])
+    
+#     dataset = VideoFrameDataset(data_path='/home/mrunal/Documents/NYUCourses/DeepLearning/project/VPTR/data/blocks/dataset/unlabeled', transform=transform, num_past_frames=5, num_future_frames=5)
+#     dataloader = DataLoader(dataset, batch_size=2, shuffle=True)
+
+#     # Get one sample
+#     for data in dataloader:
+#         past_frames = data['past_clip'][0]  # Select the first batch item
+#         future_frames = data['future_clip'][0]
+
+#         # Visualize the past frames
+#         show_frames(past_frames, "Past Frames")
+
+#         # Visualize the future frames
+#         show_frames(future_frames, "Future Frames")
+        
+#         break  # We only want to visualize one sample

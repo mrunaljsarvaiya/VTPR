@@ -104,8 +104,8 @@ def show_samples(VPTR_Enc, VPTR_Dec, sample, save_dir, renorm_transform):
         visualize_batch_clips(past_frames[0:idx, :, ...], rec_future_frames[0:idx, :, ...], rec_past_frames[0:idx, :, ...], save_dir, renorm_transform, desc = 'ae')
 
 if __name__ == '__main__':
-    ckpt_save_dir = Path('/home/travail/xiyex/VPTR_ckpts/MNIST_ResNetAE_MSEGDLgan_ckpt')
-    tensorboard_save_dir = Path('/home/travail/xiyex/VPTR_ckpts/MNIST_ResNetAE_MSEGDLgan_tensorboard')
+    ckpt_save_dir = Path('/home/mrunal/Documents/NYUCourses/DeepLearning/project/VPTR/VPTR_ckpts/MNIST_ResNetAE_MSEGDLgan_ckpt')
+    tensorboard_save_dir = Path('/home/mrunal/Documents/NYUCourses/DeepLearning/project/VPTR/VPTR_ckpts/MNIST_ResNetAE_MSEGDLgan_tensorboard')
 
     #resume_ckpt = ckpt_save_dir.joinpath('epoch_45.tar')
     resume_ckpt = None
@@ -115,18 +115,25 @@ if __name__ == '__main__':
     num_past_frames = 10
     num_future_frames = 10
     encH, encW, encC = 8, 8, 528
-    img_channels = 1 #3 channels for BAIR datset
+    img_channels = 3 #channels for BAIR datset
     epochs = 50
-    N = 32
+    N = 2
     AE_lr = 2e-4
     lam_gan = 0.01
-    device = torch.device('cuda:0')
+    device = torch.device('cuda')
 
     #####################Init Dataset ###########################
-    data_set_name = 'KTH' #see utils.dataset
-    dataset_dir = '/home/travail/xiyex/KTH'
+    data_set_name = 'BLOCKS' #see utils.dataset
+    dataset_dir = '/home/mrunal/Documents/NYUCourses/DeepLearning/project/VPTR/data/blocks/dataset/unlabeled'
+
+    # data_set_name = 'MNIST' #see utils.dataset
+    # dataset_dir = '/home/mrunal/Documents/NYUCourses/DeepLearning/project/VPTR/data/moving-mnist-example/'
+  
     train_loader, val_loader, test_loader, renorm_transform = get_dataloader(data_set_name, N, dataset_dir, num_past_frames, num_future_frames)
 
+    print(len(train_loader))
+    print(len(val_loader))
+  
     #####################Init Models and Optimizer ###########################
     VPTR_Enc = VPTREnc(img_channels, feat_dim = encC, n_downsampling = 3).to(device)
     VPTR_Dec = VPTRDec(img_channels, feat_dim = encC, n_downsampling = 3, out_layer = 'Tanh').to(device) #Sigmoid for MNIST, Tanh for KTH and BAIR
@@ -165,6 +172,7 @@ if __name__ == '__main__':
         #Train
         EpochAveMeter = AverageMeters(loss_name_list)
         for idx, sample in enumerate(train_loader, 0):
+            print(f"running iteration {idx}")
             iter_loss_dict = single_iter(VPTR_Enc, VPTR_Dec, VPTR_Disc, optimizer_G, optimizer_D, sample, device, train_flag = True)
             EpochAveMeter.iter_update(iter_loss_dict)
             
