@@ -136,9 +136,9 @@ def FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_pred, sample, save
 
 if __name__ == '__main__':
     set_seed(2021)
-    ckpt_save_dir = Path('/home/travail/xiyex/VPTR_ckpts/MNIST_FAR_MSEGDL_ckpt')
-    tensorboard_save_dir = Path('/home/travail/xiyex/VPTR_ckpts/MNIST_FAR_MSEGDL_tensorboard')
-    resume_AE_ckpt = Path('/home/travail/xiyex/VPTR_ckpts/MNIST_ResNetAE_MSEGDLgan001_ckpt').joinpath('epoch_93.tar')
+    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_MSEGDL_ckpt')
+    tensorboard_save_dir = Path('/scratch/ms14625/VTPR//VPTR_ckpts/blocks_FAR_MSEGDL_tensorboard')
+    resume_AE_ckpt = '/scratch/ms14625/VTPR/VPTR_ckpts/ae_run_blocks_MSEGDLgan_ckpt/epoch_1.tar'
     #resume_ckpt = ckpt_save_dir.joinpath('epoch_179.tar')
     resume_ckpt = None
 
@@ -153,31 +153,36 @@ if __name__ == '__main__':
 
     start_epoch = 0
     summary_writer = SummaryWriter(tensorboard_save_dir.absolute().as_posix())
-    num_past_frames = 10
-    num_future_frames = 10
-    encH, encW, encC = 8, 8, 528
-    img_channels = 1 #3 channels for BAIR
-    epochs = 100
-    N = 10
+    num_past_frames = 3
+    num_future_frames = 3
+    encH, encW, encC = 8, 8, 64
+    img_channels = 3 #3 channels for BAIR
+    epochs = 3
+    N = 16
     #AE_lr = 2e-4
     Transformer_lr = 1e-4
     max_grad_norm = 1.0 
     rpe = False
     lam_gan = 0.001
     dropout = 0.1
-    device = torch.device('cuda:0')
+    device = torch.device('cuda')
     val_per_epochs = 4
-
+    ngf = 32
+    
     #####################Init Dataset ###########################
-    data_set_name = 'MNIST'
-    dataset_dir = '/home/travail/xiyex/MovingMNIST'
-    test_past_frames = 10
-    test_future_frames = 10
+    data_set_name = 'BLOCKS' #see utils.dataset
+    # dataset_dir = '/home/mrunal/Documents/NYUCourses/DeepLearning/project/VPTR/data/blocks/dataset/unlabeled'
+    dataset_dir = '/scratch/ms14625/VTPR/data/blocks/dataset/unlabeled'
+    test_past_frames = 3
+    test_future_frames = 3
     train_loader, val_loader, test_loader, renorm_transform = get_dataloader(data_set_name, N, dataset_dir, test_past_frames, test_future_frames)
 
+    print(len(train_loader))
+    print(len(val_loader))
+
     #####################Init model###########################
-    VPTR_Enc = VPTREnc(img_channels, feat_dim = encC, n_downsampling = 3).to(device)
-    VPTR_Dec = VPTRDec(img_channels, feat_dim = encC, n_downsampling = 3, out_layer = 'Sigmoid').to(device) #Tanh for KTH and BAIR
+    VPTR_Enc = VPTREnc(img_channels, ngf=ngf, feat_dim = encC, n_downsampling = 3).to(device)
+    VPTR_Dec = VPTRDec(img_channels, ngf=ngf, feat_dim = encC, n_downsampling = 3, out_layer = 'Tanh').to(device) #Sigmoid for MNIST, Tanh for KTH and BAIR
     VPTR_Enc = VPTR_Enc.eval()
     VPTR_Dec = VPTR_Dec.eval()
 
@@ -188,7 +193,7 @@ if __name__ == '__main__':
     init_weights(VPTR_Enc)
     init_weights(VPTR_Dec)
 
-    VPTR_Transformer = VPTRFormerFAR(num_past_frames, num_future_frames, encH=encH, encW = encW, d_model=encC, 
+    VPTR_Transformer = VPTRFormerFAR(num_past_frames, num_future_frames, encH=20, encW = 30, d_model=encC, 
                                 nhead=8, num_encoder_layers=12, dropout=dropout, 
                                 window_size=4, Spatial_FFN_hidden_ratio=4, rpe=rpe).to(device)
 
@@ -220,9 +225,10 @@ if __name__ == '__main__':
         #Train
         EpochAveMeter = AverageMeters(loss_name_list)
         for idx, sample in enumerate(train_loader, 0):
+            print(f"training {idx}", flush=True)
             iter_loss_dict = single_iter(VPTR_Enc, VPTR_Dec, VPTR_Disc, VPTR_Transformer, optimizer_T, optimizer_D, sample, device, lam_gan, train_flag = True)
             EpochAveMeter.iter_update(iter_loss_dict)
-            
+
         loss_dict = EpochAveMeter.epoch_update(loss_dict, epoch, train_flag = True)
         write_summary(summary_writer, loss_dict, train_flag = True)
         FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_future_frames, sample, ckpt_save_dir.joinpath(f'train_gifs_epoch{epoch}'), test_phase = False)
@@ -233,12 +239,12 @@ if __name__ == '__main__':
             for idx, sample in enumerate(val_loader, 0):
                 iter_loss_dict = single_iter(VPTR_Enc, VPTR_Dec, VPTR_Disc, VPTR_Transformer, optimizer_T, optimizer_D, sample, device, lam_gan, train_flag = False)
                 EpochAveMeter.iter_update(iter_loss_dict)
+                
             loss_dict = EpochAveMeter.epoch_update(loss_dict, epoch, train_flag = False)
             write_summary(summary_writer, loss_dict, train_flag = False)
             
             for idx, sample in enumerate(test_loader, random.randint(0, len(test_loader) - 1)):
                 FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_future_frames, sample, ckpt_save_dir.joinpath(f'test_gifs_epoch{epoch}'), test_phase = True)
-                break
 
         save_ckpt({'VPTR_Transformer': VPTR_Transformer}, 
                 {'optimizer_T': optimizer_T}, 

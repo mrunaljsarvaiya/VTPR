@@ -113,8 +113,8 @@ if __name__ == '__main__':
     start_epoch = 0
 
     summary_writer = SummaryWriter(tensorboard_save_dir.absolute().as_posix())
-    num_past_frames = 10
-    num_future_frames = 10
+    num_past_frames = 3
+    num_future_frames = 3
     # encH, encW, encC = 8, 8, 528
     encH, encW, encC = 8, 8, 64
     img_channels = 3 #channels for BAIR datset
