@@ -41,7 +41,8 @@ class ResnetEncoder(nn.Module):
                       nn.ReLU(True)]
         
         #9 resnet-blocks
-        for i in range(9):       # add ResNet blocks
+        # OG uses 9 resnset blocks
+        for i in range(7):       # add ResNet blocks
             model += [ResnetBlock(out_dim, padding_type=padding_type, norm_layer=norm_layer, use_dropout=use_dropout, use_bias=use_bias)]
         
         model += [nn.ReLU()]

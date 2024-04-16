@@ -8,10 +8,10 @@ from utils.position_encoding import PositionEmbeddding1D, PositionEmbeddding2D, 
 import functools
 
 class VPTREnc(nn.Module):
-    def __init__(self, img_channels, feat_dim = 528, n_downsampling = 3, padding_type = 'reflect'):
+    def __init__(self, img_channels, feat_dim = 528, ngf=64, n_downsampling = 3, padding_type = 'reflect'):
         super().__init__()
         self.feat_dim = feat_dim
-        self.encoder = ResnetEncoder(input_nc = img_channels, out_dim = feat_dim, n_downsampling = n_downsampling, padding_type = padding_type)
+        self.encoder = ResnetEncoder(input_nc = img_channels, ngf=ngf, out_dim = feat_dim, n_downsampling = n_downsampling, padding_type = padding_type)
         
     def forward(self, x):
         """
@@ -29,7 +29,7 @@ class VPTREnc(nn.Module):
         return feat
 
 class VPTRDec(nn.Module):
-    def __init__(self, img_channels, feat_dim = 528, n_downsampling = 3, out_layer = 'Tanh', padding_type = 'reflect'):
+    def __init__(self, img_channels, ngf=64, feat_dim = 528, n_downsampling = 3, out_layer = 'Tanh', padding_type = 'reflect'):
         super().__init__()
         self.decoder = ResnetDecoder(output_nc = img_channels, feat_dim = feat_dim, n_downsampling = n_downsampling, out_layer = out_layer, padding_type = padding_type)
 

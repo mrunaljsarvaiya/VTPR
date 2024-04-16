@@ -101,11 +101,12 @@ def show_samples(VPTR_Enc, VPTR_Dec, sample, save_dir, renorm_transform):
 
         N = future_frames.shape[0]
         idx = min(N, 4)
+
         visualize_batch_clips(past_frames[0:idx, :, ...], rec_future_frames[0:idx, :, ...], rec_past_frames[0:idx, :, ...], save_dir, renorm_transform, desc = 'ae')
 
 if __name__ == '__main__':
-    ckpt_save_dir = Path('/home/mrunal/Documents/NYUCourses/DeepLearning/project/VPTR/VPTR_ckpts/MNIST_ResNetAE_MSEGDLgan_ckpt')
-    tensorboard_save_dir = Path('/home/mrunal/Documents/NYUCourses/DeepLearning/project/VPTR/VPTR_ckpts/MNIST_ResNetAE_MSEGDLgan_tensorboard')
+    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_2GPU_MSEGDLgan_ckpt')
+    tensorboard_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_2GPU_MSEGDLgan_tensorboard')
 
     #resume_ckpt = ckpt_save_dir.joinpath('epoch_45.tar')
     resume_ckpt = None
@@ -114,30 +115,34 @@ if __name__ == '__main__':
     summary_writer = SummaryWriter(tensorboard_save_dir.absolute().as_posix())
     num_past_frames = 10
     num_future_frames = 10
-    encH, encW, encC = 8, 8, 528
+    # encH, encW, encC = 8, 8, 528
+    encH, encW, encC = 8, 8, 64
     img_channels = 3 #channels for BAIR datset
-    epochs = 50
-    N = 2
+    n_downsampling = 4 # OG is 3
+    ngf = 32
+    epochs = 1 # 50
+    N = 64
     AE_lr = 2e-4
     lam_gan = 0.01
     device = torch.device('cuda')
 
     #####################Init Dataset ###########################
     data_set_name = 'BLOCKS' #see utils.dataset
-    dataset_dir = '/home/mrunal/Documents/NYUCourses/DeepLearning/project/VPTR/data/blocks/dataset/unlabeled'
+    # dataset_dir = '/home/mrunal/Documents/NYUCourses/DeepLearning/project/VPTR/data/blocks/dataset/unlabeled'
+    dataset_dir = '/scratch/ms14625/VTPR/data/blocks/dataset/unlabeled'
 
     # data_set_name = 'MNIST' #see utils.dataset
     # dataset_dir = '/home/mrunal/Documents/NYUCourses/DeepLearning/project/VPTR/data/moving-mnist-example/'
   
-    train_loader, val_loader, test_loader, renorm_transform = get_dataloader(data_set_name, N, dataset_dir, num_past_frames, num_future_frames)
+    train_loader, val_loader, test_loader, renorm_transform = get_dataloader(data_set_name, N, dataset_dir, num_past_frames, num_future_frames, ngpus=1)
 
     print(len(train_loader))
     print(len(val_loader))
   
     #####################Init Models and Optimizer ###########################
-    VPTR_Enc = VPTREnc(img_channels, feat_dim = encC, n_downsampling = 3).to(device)
-    VPTR_Dec = VPTRDec(img_channels, feat_dim = encC, n_downsampling = 3, out_layer = 'Tanh').to(device) #Sigmoid for MNIST, Tanh for KTH and BAIR
-    VPTR_Disc = VPTRDisc(img_channels, ndf=64, n_layers=3, norm_layer=nn.BatchNorm2d).to(device)
+    VPTR_Enc = VPTREnc(img_channels, ngf=ngf, feat_dim = encC, n_downsampling = 3).to(device)
+    VPTR_Dec = VPTRDec(img_channels, ngf=ngf, feat_dim = encC, n_downsampling = 3, out_layer = 'Tanh').to(device) #Sigmoid for MNIST, Tanh for KTH and BAIR
+    VPTR_Disc = VPTRDisc(img_channels, ndf=32, n_layers=3, norm_layer=nn.BatchNorm2d).to(device)
     init_weights(VPTR_Disc)
     init_weights(VPTR_Enc)
     init_weights(VPTR_Dec)
@@ -165,14 +170,16 @@ if __name__ == '__main__':
                                                 loss_name_list, resume_ckpt)
 
 
-    #####################Training loop ###########################                                            
+    #####################Training loop ###########################   
+    print("starting to train")                                         
     for epoch in range(start_epoch+1, start_epoch + epochs+1):
         epoch_st = datetime.now()
         
         #Train
         EpochAveMeter = AverageMeters(loss_name_list)
         for idx, sample in enumerate(train_loader, 0):
-            print(f"running iteration {idx}")
+            print(f"running iteration {idx}", flush=True)
+            # print ("Hello World ", flush=True)
             iter_loss_dict = single_iter(VPTR_Enc, VPTR_Dec, VPTR_Disc, optimizer_G, optimizer_D, sample, device, train_flag = True)
             EpochAveMeter.iter_update(iter_loss_dict)
             
@@ -182,16 +189,20 @@ if __name__ == '__main__':
         show_samples(VPTR_Enc, VPTR_Dec, sample, ckpt_save_dir.joinpath(f'train_gifs_epoch{epoch}'), renorm_transform)
         
         #validation
+        print("running through validation set")
         EpochAveMeter = AverageMeters(loss_name_list)
         for idx, sample in enumerate(val_loader, 0):
             iter_loss_dict = single_iter(VPTR_Enc, VPTR_Dec, VPTR_Disc, optimizer_G, optimizer_D, sample, device, train_flag = False)
             EpochAveMeter.iter_update(iter_loss_dict)
+            
         loss_dict = EpochAveMeter.epoch_update(loss_dict, epoch, train_flag = False)
         write_summary(summary_writer, loss_dict, train_flag = False)
-        
+        print("validation complete")
+
         save_ckpt({'VPTR_Enc': VPTR_Enc, 'VPTR_Dec': VPTR_Dec, 'VPTR_Disc': VPTR_Disc}, 
                 {'optimizer_G': optimizer_G, 'optimizer_D': optimizer_D}, 
                 epoch, loss_dict, ckpt_save_dir)
+        print("done saving")
         for idx, sample in enumerate(test_loader, random.randint(0, len(test_loader) - 1)):
             show_samples(VPTR_Enc, VPTR_Dec, sample, ckpt_save_dir.joinpath(f'test_gifs_epoch{epoch}'), renorm_transform)
             break

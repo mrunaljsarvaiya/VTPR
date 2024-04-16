@@ -132,7 +132,7 @@ def save_ckpt(Modules_dict, Optimizers_dict, epoch, loss_dict, save_dir):
     if not Path(save_dir).exists():
         Path(save_dir).mkdir(parents=True, exist_ok=True) 
     ckpt_file = Path(save_dir).joinpath(f"epoch_{epoch}.tar")
-    ckpt_codes = read_code_files()
+    ckpt_codes = ""#read_code_files()
 
     module_state_dict = {}
     for k, m in Modules_dict.items():
@@ -140,6 +140,8 @@ def save_ckpt(Modules_dict, Optimizers_dict, epoch, loss_dict, save_dir):
     optim_state_dict = {}
     for k, m in Optimizers_dict.items():
         optim_state_dict[k] = m.state_dict()
+    
+    
     torch.save({
         'epoch': epoch,
         'loss_dict': loss_dict, #{loss_name: [train_loss_list, val_loss_list]}

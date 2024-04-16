@@ -71,13 +71,13 @@ def get_dataloader(data_set_name, batch_size, data_set_dir, test_past_frames = 1
         #renorm_transform = VidReNormalize((0.6175636, 0.60508573, 0.52188003), (2.8584306, 2.8212209, 2.499153))
         transform = transforms.Compose([VidToTensor(), norm_transform])
 
-        train_set = VideoFrameDataset(data_path='/home/mrunal/Documents/NYUCourses/DeepLearning/project/VPTR/data/blocks/dataset/unlabeled', transform=transform, num_past_frames=2, num_future_frames=10)
+        train_set = VideoFrameDataset(data_path='/scratch/ms14625/VTPR/data/blocks/dataset/unlabeled', transform=transform, num_past_frames=3, num_future_frames=3)
         train_val_ratio = 0.95
         train_set_length = int(len(train_set) * train_val_ratio)
         val_set_length = len(train_set) - train_set_length
         train_set, val_set = random_split(train_set, [train_set_length, val_set_length],
                                         generator=torch.Generator().manual_seed(2021))
-
+        
         # TODO FIX
         test_set = val_set
         
