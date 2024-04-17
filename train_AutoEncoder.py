@@ -122,8 +122,8 @@ if __name__ == '__main__':
     img_channels = 3 #channels for BAIR datset
     n_downsampling = 3 # OG is 3
     ngf = 32
-    epochs = 2 # 50
-    N = 16
+    epochs = 30 # 50
+    N = 8
     AE_lr = 2e-4
     lam_gan = 0.01
     device = torch.device('cuda')
