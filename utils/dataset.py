@@ -18,7 +18,7 @@ import random
 
 import cv2
 
-def get_dataloader(data_set_name, batch_size, data_set_dir, test_past_frames = 10, test_future_frames = 10, ngpus = 1, num_workers = 1):
+def get_dataloader(data_set_name, batch_size, data_set_dir, test_past_frames = 10, test_future_frames = 10, ngpus = 1, num_workers = 8):
     if data_set_name == 'KTH':
         norm_transform = VidNormalize(mean = 0.6013795, std = 2.7570653)
         renorm_transform = VidReNormalize(mean = 0.6013795, std = 2.7570653)
@@ -71,7 +71,7 @@ def get_dataloader(data_set_name, batch_size, data_set_dir, test_past_frames = 1
         #renorm_transform = VidReNormalize((0.6175636, 0.60508573, 0.52188003), (2.8584306, 2.8212209, 2.499153))
         transform = transforms.Compose([VidToTensor(), norm_transform])
 
-        train_set = VideoFrameDataset(data_path='/scratch/ms14625/VTPR/data/blocks/dataset/unlabeled', transform=transform, num_past_frames=3, num_future_frames=3)
+        train_set = VideoFrameDataset(data_path='/scratch/ms14625/VTPR/data/blocks/dataset/unlabeled', transform=transform, num_past_frames=test_past_frames, num_future_frames=test_future_frames)
         train_val_ratio = 0.95
         train_set_length = int(len(train_set) * train_val_ratio)
         val_set_length = len(train_set) - train_set_length
@@ -621,12 +621,13 @@ class VideoFrameDataset(Dataset):
         self.num_future_frames = num_future_frames
         
         self.videos = [os.path.join(data_path, v) for v in os.listdir(data_path)]
+
         self.frames = []
         for video in self.videos:
             frames = sorted([os.path.join(video, frame) for frame in os.listdir(video)])
             if len(frames) >= num_past_frames + num_future_frames:
                 self.frames.extend([(video, i) for i in range(len(frames) - (num_past_frames + num_future_frames))])
-
+        
         print(f"Frames {len(self.frames)}")
 
     def __len__(self):
