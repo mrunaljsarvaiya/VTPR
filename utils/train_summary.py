@@ -163,9 +163,10 @@ def load_ckpt(ckpt_file, map_location = None):
 
 def visualize_batch_clips(gt_past_frames_batch, gt_future_frames_batch, pred_frames_batch, file_dir, renorm_transform = None, desc = None):
     """
-        pred_frames_batch: tensor with shape (N, future_clip_length, C, H, W)
-        gt_future_frames_batch: tensor with shape (N, future_clip_length, C, H, W)
         gt_past_frames_batch: tensor with shape (N, past_clip_length, C, H, W)
+        gt_future_frames_batch: tensor with shape (N, future_clip_length, C, H, W), predicted future frames
+        pred_frames_batch: tensor with shape (N, future_clip_length, C, H, W), predicted past frames
+
     """
     if not Path(file_dir).exists():
         Path(file_dir).mkdir(parents=True, exist_ok=True) 
@@ -185,13 +186,17 @@ def visualize_batch_clips(gt_past_frames_batch, gt_future_frames_batch, pred_fra
         batch = torch.cat([batch, batch[:, -2:-1, :, :, :].repeat(1, d, 1, 1, 1)], dim = 1)
         return batch
 
+    # max_length = max(gt_future_frames_batch.shape[1], gt_past_frames_batch.shape[1])
     max_length = max(gt_future_frames_batch.shape[1], gt_past_frames_batch.shape[1])
+    max_length = max(max_length, pred_frames_batch.shape[1])
     if gt_past_frames_batch.shape[1] < max_length:
         gt_past_frames_batch = append_frames(gt_past_frames_batch, max_length)
     if gt_future_frames_batch.shape[1] < max_length:
         gt_future_frames_batch = append_frames(gt_future_frames_batch, max_length)
     if pred_frames_batch.shape[1] < max_length:
         pred_frames_batch = append_frames(pred_frames_batch, max_length)
+
+    # import pdb; pdb.set_trace()
 
     batch = torch.cat([gt_past_frames_batch, gt_future_frames_batch, pred_frames_batch], dim = -1) #shape (N, clip_length, C, H, 3W)
     batch = batch.cpu()

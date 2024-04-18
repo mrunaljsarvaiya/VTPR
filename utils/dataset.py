@@ -67,14 +67,18 @@ def get_dataloader(data_set_name, batch_size, data_set_dir, test_past_frames = 1
         dataset_dir = Path(data_set_dir)
         norm_transform = VidNormalize((0.5059, 0.5043, 0.5007), (0.0574, 0.0571, 0.0616))
         renorm_transform = VidReNormalize((0.5059, 0.5043, 0.5007), (0.0574, 0.0571, 0.0616))
-        #norm_transform = VidNormalize((0.6175636, 0.60508573, 0.52188003), (2.8584306, 2.8212209, 2.499153))
-        #renorm_transform = VidReNormalize((0.6175636, 0.60508573, 0.52188003), (2.8584306, 2.8212209, 2.499153))
+        # norm_transform = VidNormalize((0.6175636, 0.60508573, 0.52188003), (2.8584306, 2.8212209, 2.499153))
+        # renorm_transform = VidReNormalize((0.6175636, 0.60508573, 0.52188003), (2.8584306, 2.8212209, 2.499153))
         transform = transforms.Compose([VidToTensor(), norm_transform])
 
         train_set = VideoFrameDataset(data_path='/scratch/ms14625/VTPR/data/blocks/dataset/unlabeled', transform=transform, num_past_frames=test_past_frames, num_future_frames=test_future_frames)
         train_val_ratio = 0.95
         train_set_length = int(len(train_set) * train_val_ratio)
         val_set_length = len(train_set) - train_set_length
+
+        # val_set_length = 20
+        # train_set_length = 40
+
         train_set, val_set = random_split(train_set, [train_set_length, val_set_length],
                                         generator=torch.Generator().manual_seed(2021))
         
@@ -95,6 +99,49 @@ def get_dataloader(data_set_name, batch_size, data_set_dir, test_past_frames = 1
         val_loader = DataLoader(val_set, batch_size=N, shuffle=False, pin_memory=True, num_workers=num_workers, sampler=val_sampler, drop_last = True)
 
     return train_loader, val_loader, test_loader, renorm_transform
+
+class VideoFrameDataset(Dataset):
+    def __init__(self, data_path, transform=None, num_past_frames=5, num_future_frames=5):
+        """
+        Args:
+            data_path (str): Path to the directory containing video folders.
+            transform (callable, optional): Optional transform to be applied on a sample.
+            num_past_frames (int): Number of past frames to include in each sample.
+            num_future_frames (int): Number of future frames to include in each sample.
+        """
+        self.data_path = data_path
+        self.transform = transform
+        self.num_past_frames = num_past_frames
+        self.num_future_frames = num_future_frames
+        
+        self.videos = [os.path.join(data_path, v) for v in os.listdir(data_path)]
+        # self.videos = self.videos[:60]
+        self.frames = []
+        for video in self.videos:
+            frames = sorted([os.path.join(video, frame) for frame in os.listdir(video)])
+            if len(frames) >= num_past_frames + num_future_frames:
+                self.frames.extend([(video, i) for i in range(len(frames) - (num_past_frames + num_future_frames))])
+        
+        print(f"Frames {len(self.frames)}")
+
+    def __len__(self):
+        return len(self.frames)
+
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.to_list()
+        
+        video, frame_idx = self.frames[idx]
+        frame_paths = [os.path.join(video, f'image_{frame_idx + i}.png') for i in range(self.num_past_frames + self.num_future_frames)]
+
+        frames = [Image.open(fp).convert('RGB') for fp in frame_paths]
+        frames = self.transform(frames)
+
+        past_clip = frames[0:self.num_past_frames, ...]
+        future_clip = frames[-self.num_future_frames:, ...]
+        
+        return past_clip, future_clip
+
 
 class KTHDataset(object):
     """
@@ -605,48 +652,6 @@ def find_mean_std_blocks():
     mean, std = compute_mean_std(dataloader)
     print(f"Mean: {mean}")
     print(f"Std: {std}")
-
-class VideoFrameDataset(Dataset):
-    def __init__(self, data_path, transform=None, num_past_frames=5, num_future_frames=5):
-        """
-        Args:
-            data_path (str): Path to the directory containing video folders.
-            transform (callable, optional): Optional transform to be applied on a sample.
-            num_past_frames (int): Number of past frames to include in each sample.
-            num_future_frames (int): Number of future frames to include in each sample.
-        """
-        self.data_path = data_path
-        self.transform = transform
-        self.num_past_frames = num_past_frames
-        self.num_future_frames = num_future_frames
-        
-        self.videos = [os.path.join(data_path, v) for v in os.listdir(data_path)]
-
-        self.frames = []
-        for video in self.videos:
-            frames = sorted([os.path.join(video, frame) for frame in os.listdir(video)])
-            if len(frames) >= num_past_frames + num_future_frames:
-                self.frames.extend([(video, i) for i in range(len(frames) - (num_past_frames + num_future_frames))])
-        
-        print(f"Frames {len(self.frames)}")
-
-    def __len__(self):
-        return len(self.frames)
-
-    def __getitem__(self, idx):
-        if torch.is_tensor(idx):
-            idx = idx.to_list()
-        
-        video, frame_idx = self.frames[idx]
-        frame_paths = [os.path.join(video, f'image_{frame_idx + i}.png') for i in range(self.num_past_frames + self.num_future_frames)]
-
-        frames = [Image.open(fp).convert('RGB') for fp in frame_paths]
-        frames = self.transform(frames)
-
-        past_clip = frames[0:self.num_past_frames, ...]
-        future_clip = frames[-self.num_future_frames:, ...]
-        
-        return past_clip, future_clip
 
 # find_mean_std_blocks()
 

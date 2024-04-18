@@ -126,19 +126,22 @@ def FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_pred, sample, save
             pred_feats = VPTR_Transformer(input_feats)
     
         pred_frames = VPTR_Dec(pred_feats)
+
     pred_past_frames = pred_frames[:, 0:-num_pred, ...]
     pred_future_frames = pred_frames[:, -num_pred:, ...]
     N = pred_future_frames.shape[0]
-    idx = min(N, 4)
+    # idx = min(N, 4)
+    idx = 10
+    
     visualize_batch_clips(past_frames[0:idx, :, ...], future_frames[0:idx, :, ...], pred_future_frames[0:idx, :, ...], save_dir, renorm_transform, desc = 'pred_future')
-    visualize_batch_clips(past_frames[0:idx, 1:, ...], pred_past_frames[0:idx, :, ...], pred_future_frames[0:idx, :-1, ...], save_dir, renorm_transform, desc = 'pred_past')
+    # visualize_batch_clips(past_frames[0:idx, 1:, ...], pred_past_frames[0:idx, :, ...], pred_future_frames[0:idx, :-1, ...], save_dir, renorm_transform, desc = 'pred_past')
 
 
 if __name__ == '__main__':
     set_seed(2021)
-    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_MSEGDL_ckpt')
-    tensorboard_save_dir = Path('/scratch/ms14625/VTPR//VPTR_ckpts/blocks_FAR_MSEGDL_tensorboard')
-    resume_AE_ckpt = '/scratch/ms14625/VTPR/VPTR_ckpts/ae_run_blocks_MSEGDLgan_ckpt/epoch_1.tar'
+    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_ckpt')
+    tensorboard_save_dir = Path('/scratch/ms14625/VTPR//VPTR_ckpts/blocks_FAR_tensorboard')
+    resume_AE_ckpt = '/scratch/ms14625/VTPR/VPTR_ckpts/blocks_past_10_future_11_MSEGDLgan_ckpt/epoch_29.tar'
     #resume_ckpt = ckpt_save_dir.joinpath('epoch_179.tar')
     resume_ckpt = None
 
@@ -153,9 +156,9 @@ if __name__ == '__main__':
 
     start_epoch = 0
     summary_writer = SummaryWriter(tensorboard_save_dir.absolute().as_posix())
-    num_past_frames = 3
-    num_future_frames = 3
-    encH, encW, encC = 8, 8, 64
+    num_past_frames = 10
+    num_future_frames = 11
+    encH, encW, encC = 8, 8, 128
     img_channels = 3 #3 channels for BAIR
     epochs = 3
     N = 16
@@ -166,7 +169,7 @@ if __name__ == '__main__':
     lam_gan = 0.001
     dropout = 0.1
     device = torch.device('cuda')
-    val_per_epochs = 4
+    val_per_epochs = 1
     ngf = 32
     
     #####################Init Dataset ###########################
@@ -214,9 +217,12 @@ if __name__ == '__main__':
     #load the trained autoencoder, we initialize the discriminator from scratch, for a balanced training
     loss_dict, start_epoch = resume_training({'VPTR_Enc': VPTR_Enc, 'VPTR_Dec': VPTR_Dec}, {}, resume_AE_ckpt, loss_name_list)
 
+    start_epoch = 0 
+
     if resume_ckpt is not None:
         loss_dict, start_epoch = resume_training({'VPTR_Transformer': VPTR_Transformer}, 
                                                 {'optimizer_T':optimizer_T}, resume_ckpt, loss_name_list)
+    
     
     #####################Train ################################
     for epoch in range(start_epoch+1, start_epoch + epochs+1):
@@ -239,18 +245,19 @@ if __name__ == '__main__':
             for idx, sample in enumerate(val_loader, 0):
                 iter_loss_dict = single_iter(VPTR_Enc, VPTR_Dec, VPTR_Disc, VPTR_Transformer, optimizer_T, optimizer_D, sample, device, lam_gan, train_flag = False)
                 EpochAveMeter.iter_update(iter_loss_dict)
-                
+
             loss_dict = EpochAveMeter.epoch_update(loss_dict, epoch, train_flag = False)
             write_summary(summary_writer, loss_dict, train_flag = False)
             
             for idx, sample in enumerate(test_loader, random.randint(0, len(test_loader) - 1)):
                 FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_future_frames, sample, ckpt_save_dir.joinpath(f'test_gifs_epoch{epoch}'), test_phase = True)
-
+                break
+        
         save_ckpt({'VPTR_Transformer': VPTR_Transformer}, 
                 {'optimizer_T': optimizer_T}, 
                 epoch, loss_dict, ckpt_save_dir)
 
         epoch_time = datetime.now() - epoch_st
 
-        logging.info(f"epoch {epoch}, {EpochAveMeter.meters['T_total']}")
-        logging.info(f"Estimated remaining training time: {epoch_time.total_seconds()/3600. * (start_epoch + epochs - epoch)} Hours")
+        print(f"epoch {epoch}, {EpochAveMeter.meters['T_total']}")
+        print(f"Estimated remaining training time: {epoch_time.total_seconds()/3600. * (start_epoch + epochs - epoch)} Hours")

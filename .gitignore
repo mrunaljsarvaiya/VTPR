@@ -1,2 +1,3 @@
 /VPTR_ckpts/*
 /data/*
+/slurm_logs/*
