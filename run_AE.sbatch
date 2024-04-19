@@ -6,7 +6,7 @@
 #SBATCH --time=18:00:00
 #SBATCH --mem=32GB
 #SBATCH --gres=gpu:1
-#SBATCH --job-name=nar_past_10_future_11
+#SBATCH --job-name=nar_past_10_future_11_kaiming
 #SBATCH --mail-user=ms14625@nyu.edu
 #SBATCH --output=slurm_logs/slurm_%j.out
 #SBATCH --error=slurm_logs/slurm_%j.err

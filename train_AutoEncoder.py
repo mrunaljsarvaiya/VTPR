@@ -107,8 +107,8 @@ def show_samples(VPTR_Enc, VPTR_Dec, sample, save_dir, renorm_transform):
         visualize_batch_clips(past_frames[0:idx, :, ...], rec_future_frames[0:idx, :, ...], rec_past_frames[0:idx, :, ...], save_dir, renorm_transform, desc = 'ae')
 
 if __name__ == '__main__':
-    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_past_10_future_11_MSEGDLgan_ckpt')
-    tensorboard_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_past_10_future_11_MSEGDLgan_tensorboard')
+    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_past_10_future_11_kaiming_ckpt')
+    tensorboard_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_past_10_future_11_kaiming_tensorboard')
 
     #resume_ckpt = ckpt_save_dir.joinpath('epoch_45.tar')
     resume_ckpt = None
@@ -121,10 +121,10 @@ if __name__ == '__main__':
     encH, encW, encC = 8, 8, 128
     img_channels = 3 #channels for BAIR datset
     n_downsampling = 3 # OG is 3
-    ngf = 32
+    ngf = 64
     epochs = 30 # 50
     N = 8
-    AE_lr = 2e-4
+    AE_lr = 4e-4
     lam_gan = 0.01
     device = torch.device('cuda')
 
@@ -145,9 +145,9 @@ if __name__ == '__main__':
     VPTR_Enc = VPTREnc(img_channels, ngf=ngf, feat_dim = encC, n_downsampling = n_downsampling).to(device)
     VPTR_Dec = VPTRDec(img_channels, ngf=ngf, feat_dim = encC, n_downsampling = n_downsampling, out_layer = 'Tanh').to(device) #Sigmoid for MNIST, Tanh for KTH and BAIR
     VPTR_Disc = VPTRDisc(img_channels, ndf=32, n_layers=3, norm_layer=nn.BatchNorm2d).to(device)
-    init_weights(VPTR_Disc)
-    init_weights(VPTR_Enc)
-    init_weights(VPTR_Dec)
+    init_weights(VPTR_Disc, init_type='kaiming')
+    init_weights(VPTR_Enc, init_type='kaiming')
+    init_weights(VPTR_Dec, init_type='kaiming')
    
     optimizer_G = torch.optim.Adam(params = list(VPTR_Enc.parameters()) + list(VPTR_Dec.parameters()), lr=AE_lr, betas = (0.5, 0.999))
     optimizer_D = torch.optim.Adam(params = VPTR_Disc.parameters(), lr=AE_lr, betas = (0.5, 0.999))
@@ -180,13 +180,17 @@ if __name__ == '__main__':
         #Train
         EpochAveMeter = AverageMeters(loss_name_list)
         for idx, sample in enumerate(train_loader, 0):
-            print(f"running iteration {idx}", flush=True)
+            if idx % 1000 == 0 :
+                print(f"running iteration {idx}", flush=True)
+
+            #     iter_loss_dict = single_iter(VPTR_Enc, VPTR_Dec, VPTR_Disc, optimizer_G, optimizer_D, sample, device, train_flag = False)
+            #     print(f"loss {iter_loss_dict['AE_total']}")
+
             start = time.time()
             iter_loss_dict = single_iter(VPTR_Enc, VPTR_Dec, VPTR_Disc, optimizer_G, optimizer_D, sample, device, train_flag = True)
             end = time.time()
-            print(f"time taken {end - start}", flush=True)
+            # print(f"time taken {end - start}", flush=True)
             EpochAveMeter.iter_update(iter_loss_dict)
-
 
         loss_dict = EpochAveMeter.epoch_update(loss_dict, epoch, train_flag = True)
         write_summary(summary_writer, loss_dict, train_flag = True)
@@ -194,12 +198,13 @@ if __name__ == '__main__':
         show_samples(VPTR_Enc, VPTR_Dec, sample, ckpt_save_dir.joinpath(f'train_gifs_epoch{epoch}'), renorm_transform)
         
         #validation
+        # CHANGE OT USE VAL
         print("running through validation set")
         EpochAveMeter = AverageMeters(loss_name_list)
-        for idx, sample in enumerate(val_loader, 0):
+        for idx, sample in enumerate(train_loader, 0):
             iter_loss_dict = single_iter(VPTR_Enc, VPTR_Dec, VPTR_Disc, optimizer_G, optimizer_D, sample, device, train_flag = False)
             EpochAveMeter.iter_update(iter_loss_dict)
-            
+
         loss_dict = EpochAveMeter.epoch_update(loss_dict, epoch, train_flag = False)
         write_summary(summary_writer, loss_dict, train_flag = False)
         print("validation complete")

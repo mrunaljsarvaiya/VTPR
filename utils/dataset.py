@@ -84,11 +84,17 @@ def get_dataloader(data_set_name, batch_size, data_set_dir, test_past_frames = 1
         
         # TODO FIX
         test_set = val_set
-        
+
+
     N = batch_size
     train_loader = DataLoader(train_set, batch_size=N, shuffle=True, num_workers=num_workers, drop_last = True)
     val_loader = DataLoader(val_set, batch_size=N, shuffle=True, num_workers=num_workers, drop_last = True)
     test_loader = DataLoader(test_set, batch_size=N, shuffle=True, num_workers=num_workers, drop_last = False)
+
+    train_loader = DataLoader(train_set, batch_size=N, shuffle=True, num_workers=num_workers, drop_last = False)
+    val_loader = DataLoader(val_set, batch_size=N, shuffle=True, num_workers=num_workers, drop_last = False)
+    test_loader = DataLoader(test_set, batch_size=N, shuffle=True, num_workers=num_workers, drop_last = False)
+
 
     if ngpus > 1:
         N = batch_size//ngpus
@@ -115,7 +121,7 @@ class VideoFrameDataset(Dataset):
         self.num_future_frames = num_future_frames
         
         self.videos = [os.path.join(data_path, v) for v in os.listdir(data_path)]
-        # self.videos = self.videos[:60]
+        # self.videos = self.videos[:1]
         self.frames = []
         for video in self.videos:
             frames = sorted([os.path.join(video, frame) for frame in os.listdir(video)])
@@ -133,7 +139,7 @@ class VideoFrameDataset(Dataset):
         
         video, frame_idx = self.frames[idx]
         frame_paths = [os.path.join(video, f'image_{frame_idx + i}.png') for i in range(self.num_past_frames + self.num_future_frames)]
-
+        
         frames = [Image.open(fp).convert('RGB') for fp in frame_paths]
         frames = self.transform(frames)
 
@@ -639,17 +645,48 @@ def compute_mean_std(dataloader):
 
     return mean, std
 
+def compute_mean_std2(dataloader):
+    print("Finding mean and std")
+    device = torch.device('cuda')
+    # Variables to store sum, square sum, and count of pixels
+    channel_sum, channel_squared_sum, num_batches = 0, 0, 0
+
+    print(f"len {len(dataloader)}")
+
+    # Loop over the data loader
+    for idx, data in enumerate(dataloader):
+        print(idx)
+        # Unpack data; assuming data['past_clip'] and data['future_clip'] are normalized
+        past_frames, future_frames = data
+        past_frames = past_frames.to(device)
+        future_frames = future_frames.to(device)
+
+        # Combine past and future frames for statistics computation
+        frames = torch.cat((past_frames, future_frames), dim=1)
+        frames = frames.view(-1, frames.size(2), frames.size(3), frames.size(4))
+
+
+        channel_sum += torch.mean(frames, dim=[0, 2, 3])
+        channel_squared_sum += torch.mean((frames ** 2), dim=[0, 2, 3])
+        num_batches += 1  # Total number of images times W*H0
+
+    mean = channel_sum / num_batches
+    # Standard deviation formula: sqrt(E[X^2] - (E[X])^2)
+    std = torch.abs(channel_squared_sum / num_batches - mean ** 2) ** 0.5
+
+    return mean, std
+
 def find_mean_std_blocks():
     print("Finding mean and std")
 
     # Setting up dataset and dataloader
     transform = transforms.Compose([VidToTensor()])
 
-    dataset = VideoFrameDataset(data_path='/home/mrunal/Documents/NYUCourses/DeepLearning/project/VPTR/data/blocks/dataset/unlabeled', transform=transform, num_past_frames=2, num_future_frames=5)
-    dataloader = DataLoader(dataset, batch_size=5, shuffle=False, num_workers=4)  # Adjust num_workers based on your system
+    dataset = VideoFrameDataset(data_path='/scratch/ms14625/VTPR/data/blocks/dataset/unlabeled', transform=transform, num_past_frames=2, num_future_frames=5)
+    dataloader = DataLoader(dataset, batch_size=512, shuffle=False, num_workers=8)  # Adjust num_workers based on your system
 
     # Compute mean and std
-    mean, std = compute_mean_std(dataloader)
+    mean, std = compute_mean_std2(dataloader)
     print(f"Mean: {mean}")
     print(f"Std: {std}")
 
