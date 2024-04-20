@@ -71,7 +71,7 @@ def get_dataloader(data_set_name, batch_size, data_set_dir, test_past_frames = 1
         # renorm_transform = VidReNormalize((0.6175636, 0.60508573, 0.52188003), (2.8584306, 2.8212209, 2.499153))
         transform = transforms.Compose([VidToTensor(), norm_transform])
 
-        train_set = VideoFrameDataset(data_path='/scratch/ms14625/VTPR/data/blocks/dataset/unlabeled', transform=transform, num_past_frames=test_past_frames, num_future_frames=test_future_frames)
+        train_set = VideoFrameDataset(data_path=data_set_dir, transform=transform, num_past_frames=test_past_frames, num_future_frames=test_future_frames)
         train_val_ratio = 0.95
         train_set_length = int(len(train_set) * train_val_ratio)
         val_set_length = len(train_set) - train_set_length

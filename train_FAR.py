@@ -139,10 +139,9 @@ def FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_pred, sample, save
 
 if __name__ == '__main__':
     set_seed(2021)
-    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_kaiming_ckpt')
-    tensorboard_save_dir = Path('/scratch/ms14625/VTPR//VPTR_ckpts/blocks_FAR_kaiming_tensorboard')
+    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_kaiming_3_ckpt')
+    tensorboard_save_dir = Path('/scratch/ms14625/VTPR//VPTR_ckpts/blocks_FAR_kaiming_3_tensorboard')
     resume_AE_ckpt = '/scratch/ms14625/VTPR/VPTR_ckpts/blocks_past_10_future_11_kaiming_ckpt/epoch_28.tar'
-    #resume_ckpt = ckpt_save_dir.joinpath('epoch_179.tar')
     resume_ckpt = None
 
     #############Set the logger#########
@@ -161,7 +160,7 @@ if __name__ == '__main__':
     encH, encW, encC = 8, 8, 128
     img_channels = 3 #3 channels for BAIR
     epochs = 3
-    N = 16
+    N = 4
     #AE_lr = 2e-4
     Transformer_lr = 1e-4
     max_grad_norm = 1.0 
@@ -176,8 +175,8 @@ if __name__ == '__main__':
     data_set_name = 'BLOCKS' #see utils.dataset
     # dataset_dir = '/home/mrunal/Documents/NYUCourses/DeepLearning/project/VPTR/data/blocks/dataset/unlabeled'
     dataset_dir = '/scratch/ms14625/VTPR/data/blocks/dataset/unlabeled'
-    test_past_frames = 3
-    test_future_frames = 3
+    test_past_frames = 10
+    test_future_frames = 11
     train_loader, val_loader, test_loader, renorm_transform = get_dataloader(data_set_name, N, dataset_dir, test_past_frames, test_future_frames)
 
     print(len(train_loader))
@@ -223,7 +222,7 @@ if __name__ == '__main__':
         loss_dict, start_epoch = resume_training({'VPTR_Transformer': VPTR_Transformer}, 
                                                 {'optimizer_T':optimizer_T}, resume_ckpt, loss_name_list)
     
-    
+        print("LOADED")
     #####################Train ################################
     for epoch in range(start_epoch+1, start_epoch + epochs+1):
         epoch_st = datetime.now()
@@ -234,7 +233,7 @@ if __name__ == '__main__':
             print(f"training {idx}", flush=True)
             iter_loss_dict = single_iter(VPTR_Enc, VPTR_Dec, VPTR_Disc, VPTR_Transformer, optimizer_T, optimizer_D, sample, device, lam_gan, train_flag = True)
             EpochAveMeter.iter_update(iter_loss_dict)
-
+            
         loss_dict = EpochAveMeter.epoch_update(loss_dict, epoch, train_flag = True)
         write_summary(summary_writer, loss_dict, train_flag = True)
         FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_future_frames, sample, ckpt_save_dir.joinpath(f'train_gifs_epoch{epoch}'), test_phase = False)
