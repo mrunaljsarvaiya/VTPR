@@ -124,7 +124,7 @@ if __name__ == '__main__':
     ngf = 64
     epochs = 30 # 50
     N = 8
-    AE_lr = 4e-4
+    AE_lr = 2e-4
     lam_gan = 0.01
     device = torch.device('cuda')
 

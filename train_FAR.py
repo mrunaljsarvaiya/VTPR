@@ -139,9 +139,9 @@ def FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_pred, sample, save
 
 if __name__ == '__main__':
     set_seed(2021)
-    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_ckpt')
-    tensorboard_save_dir = Path('/scratch/ms14625/VTPR//VPTR_ckpts/blocks_FAR_tensorboard')
-    resume_AE_ckpt = '/scratch/ms14625/VTPR/VPTR_ckpts/blocks_past_10_future_11_MSEGDLgan_ckpt/epoch_29.tar'
+    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_kaiming_ckpt')
+    tensorboard_save_dir = Path('/scratch/ms14625/VTPR//VPTR_ckpts/blocks_FAR_kaiming_tensorboard')
+    resume_AE_ckpt = '/scratch/ms14625/VTPR/VPTR_ckpts/blocks_past_10_future_11_kaiming_ckpt/epoch_28.tar'
     #resume_ckpt = ckpt_save_dir.joinpath('epoch_179.tar')
     resume_ckpt = None
 
@@ -170,7 +170,7 @@ if __name__ == '__main__':
     dropout = 0.1
     device = torch.device('cuda')
     val_per_epochs = 1
-    ngf = 32
+    ngf = 64
     
     #####################Init Dataset ###########################
     data_set_name = 'BLOCKS' #see utils.dataset
