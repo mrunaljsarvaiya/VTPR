@@ -6,6 +6,7 @@ import torchvision.utils as vutils
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset, DataLoader, ConcatDataset, random_split
 from torch import Tensor
+import random 
 
 import numpy as np
 from PIL import Image
@@ -18,7 +19,7 @@ import random
 
 import cv2
 
-def get_dataloader(data_set_name, batch_size, data_set_dir, test_past_frames = 10, test_future_frames = 10, ngpus = 1, num_workers = 8):
+def get_dataloader(data_set_name, batch_size, data_set_dir, test_past_frames = 10, test_future_frames = 2, ngpus = 1, num_workers = 8, bw=False):
     if data_set_name == 'KTH':
         norm_transform = VidNormalize(mean = 0.6013795, std = 2.7570653)
         renorm_transform = VidReNormalize(mean = 0.6013795, std = 2.7570653)
@@ -65,13 +66,21 @@ def get_dataloader(data_set_name, batch_size, data_set_dir, test_past_frames = 1
 
     elif data_set_name == 'BLOCKS':
         dataset_dir = Path(data_set_dir)
-        norm_transform = VidNormalize((0.5059, 0.5043, 0.5007), (0.0574, 0.0571, 0.0616))
-        renorm_transform = VidReNormalize((0.5059, 0.5043, 0.5007), (0.0574, 0.0571, 0.0616))
-        # norm_transform = VidNormalize((0.6175636, 0.60508573, 0.52188003), (2.8584306, 2.8212209, 2.499153))
-        # renorm_transform = VidReNormalize((0.6175636, 0.60508573, 0.52188003), (2.8584306, 2.8212209, 2.499153))
-        transform = transforms.Compose([VidToTensor(), norm_transform])
 
-        train_set = VideoFrameDataset(data_path=data_set_dir, transform=transform, num_past_frames=test_past_frames, num_future_frames=test_future_frames)
+        if not bw:
+            norm_transform = VidNormalize((0.5059, 0.5043, 0.5007), (0.0574, 0.0571, 0.0616))
+            renorm_transform = VidReNormalize((0.5059, 0.5043, 0.5007), (0.0574, 0.0571, 0.0616))
+            # norm_transform = VidNormalize((0.6175636, 0.60508573, 0.52188003), (2.8584306, 2.8212209, 2.499153))
+            # renorm_transform = VidReNormalize((0.6175636, 0.60508573, 0.52188003), (2.8584306, 2.8212209, 2.499153))
+            transform = transforms.Compose([VidToTensor(), norm_transform])
+
+            train_set = VideoFrameDataset(data_path=data_set_dir, transform=transform, num_past_frames=test_past_frames, num_future_frames=test_future_frames, bw=bw)
+        else:
+            norm_transform = VidNormalize((0.5045), (0.054))
+            renorm_transform = VidReNormalize((0.5045), (0.054))
+            transform = transforms.Compose([VidToTensor(), norm_transform])
+            train_set = VideoFrameDataset(data_path=data_set_dir, transform=transform, num_past_frames=test_past_frames, num_future_frames=test_future_frames, bw=bw)
+
         train_val_ratio = 0.95
         train_set_length = int(len(train_set) * train_val_ratio)
         val_set_length = len(train_set) - train_set_length
@@ -107,7 +116,7 @@ def get_dataloader(data_set_name, batch_size, data_set_dir, test_past_frames = 1
     return train_loader, val_loader, test_loader, renorm_transform
 
 class VideoFrameDataset(Dataset):
-    def __init__(self, data_path, transform=None, num_past_frames=5, num_future_frames=5):
+    def __init__(self, data_path, transform=None, num_past_frames=10, num_future_frames=2, bw=False):
         """
         Args:
             data_path (str): Path to the directory containing video folders.
@@ -119,7 +128,9 @@ class VideoFrameDataset(Dataset):
         self.transform = transform
         self.num_past_frames = num_past_frames
         self.num_future_frames = num_future_frames
-        
+        self.bw = bw
+        random.seed(10)
+
         self.videos = [os.path.join(data_path, v) for v in os.listdir(data_path)]
         # self.videos = self.videos[:1]
         self.frames = []
@@ -128,6 +139,8 @@ class VideoFrameDataset(Dataset):
             if len(frames) >= num_past_frames + num_future_frames:
                 self.frames.extend([(video, i) for i in range(len(frames) - (num_past_frames + num_future_frames))])
         
+        random.shuffle(self.frames)
+        # self.frames = self.frames[:6000]
         print(f"Frames {len(self.frames)}")
 
     def __len__(self):
@@ -140,7 +153,11 @@ class VideoFrameDataset(Dataset):
         video, frame_idx = self.frames[idx]
         frame_paths = [os.path.join(video, f'image_{frame_idx + i}.png') for i in range(self.num_past_frames + self.num_future_frames)]
         
-        frames = [Image.open(fp).convert('RGB') for fp in frame_paths]
+        if not self.bw:
+            frames = [Image.open(fp).convert('RGB') for fp in frame_paths]
+        else:
+            frames = [Image.open(fp).convert('L') for fp in frame_paths]
+
         frames = self.transform(frames)
 
         past_clip = frames[0:self.num_past_frames, ...]
