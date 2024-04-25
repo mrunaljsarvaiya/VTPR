@@ -118,7 +118,7 @@ if __name__ == '__main__':
     num_past_frames = 10
     num_future_frames = 11
     # encH, encW, encC = 8, 8, 528
-    encH, encW, encC = 8, 8, 128
+    encH, encW, encC = 8, 8, 528
     img_channels = 3 #channels for BAIR datset
     n_downsampling = 3 # OG is 3
     ngf = 128

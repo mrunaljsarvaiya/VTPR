@@ -5,6 +5,7 @@ import torchvision.transforms as transforms
 from torch.utils.data import Dataset, DataLoader, random_split
 from torch.utils.tensorboard import SummaryWriter
 import torch.nn.functional as F
+import time 
 
 from pathlib import Path
 import random
@@ -139,9 +140,9 @@ def FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_pred, sample, save
 
 if __name__ == '__main__':
     set_seed(2021)
-    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_kaiming_3_ckpt')
-    tensorboard_save_dir = Path('/scratch/ms14625/VTPR//VPTR_ckpts/blocks_FAR_kaiming_3_tensorboard')
-    resume_AE_ckpt = '/scratch/ms14625/VTPR/VPTR_ckpts/blocks_past_10_future_11_kaiming_ckpt/epoch_28.tar'
+    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_past_10_future_11_color_ckpt')
+    tensorboard_save_dir = Path('/scratch/ms14625/VTPR//VPTR_ckpts/blocks_FAR_past_10_future_11_color_tensorboard')
+    resume_AE_ckpt = '/scratch/ms14625/VTPR/VPTR_ckpts/blocks_AE_past_10_future_11_color_ckpt/epoch_6.tar'
     resume_ckpt = None
 
     #############Set the logger#########
@@ -157,10 +158,10 @@ if __name__ == '__main__':
     summary_writer = SummaryWriter(tensorboard_save_dir.absolute().as_posix())
     num_past_frames = 10
     num_future_frames = 11
-    encH, encW, encC = 8, 8, 128
+    encH, encW, encC = 20, 30, 528
     img_channels = 3 #3 channels for BAIR
     epochs = 3
-    N = 4
+    N = 2
     #AE_lr = 2e-4
     Transformer_lr = 1e-4
     max_grad_norm = 1.0 
@@ -169,7 +170,7 @@ if __name__ == '__main__':
     dropout = 0.1
     device = torch.device('cuda')
     val_per_epochs = 1
-    ngf = 64
+    ngf = 128
     
     #####################Init Dataset ###########################
     data_set_name = 'BLOCKS' #see utils.dataset
@@ -177,30 +178,30 @@ if __name__ == '__main__':
     dataset_dir = '/scratch/ms14625/VTPR/data/blocks/dataset/unlabeled'
     test_past_frames = 10
     test_future_frames = 11
-    train_loader, val_loader, test_loader, renorm_transform = get_dataloader(data_set_name, N, dataset_dir, test_past_frames, test_future_frames)
+    train_loader, val_loader, test_loader, renorm_transform = get_dataloader(data_set_name, N, dataset_dir, test_past_frames, test_future_frames, bw=False)
 
     print(len(train_loader))
     print(len(val_loader))
 
     #####################Init model###########################
     VPTR_Enc = VPTREnc(img_channels, ngf=ngf, feat_dim = encC, n_downsampling = 3).to(device)
-    VPTR_Dec = VPTRDec(img_channels, ngf=ngf, feat_dim = encC, n_downsampling = 3, out_layer = 'Tanh').to(device) #Sigmoid for MNIST, Tanh for KTH and BAIR
+    VPTR_Dec = VPTRDec(img_channels, ngf=ngf, feat_dim = encC, n_downsampling = 3, out_layer = 'ReLU').to(device) #Sigmoid for MNIST, Tanh for KTH and BAIR
     VPTR_Enc = VPTR_Enc.eval()
     VPTR_Dec = VPTR_Dec.eval()
 
     VPTR_Disc = None
-    #VPTR_Disc = VPTRDisc(img_channels, ndf=64, n_layers=3, norm_layer=nn.BatchNorm2d).to(device)
-    #VPTR_Disc = VPTR_Disc.eval()
-    #init_weights(VPTR_Disc)
+    # VPTR_Disc = VPTRDisc(img_channels, ndf=64, n_layers=3, norm_layer=nn.BatchNorm2d).to(device)
+    # VPTR_Disc = VPTR_Disc.eval()
+    # init_weights(VPTR_Disc, init_type='kaiming')
     init_weights(VPTR_Enc)
     init_weights(VPTR_Dec)
 
-    VPTR_Transformer = VPTRFormerFAR(num_past_frames, num_future_frames, encH=20, encW = 30, d_model=encC, 
+    VPTR_Transformer = VPTRFormerFAR(num_past_frames, num_future_frames, encH=encH, encW = encW, d_model=encC, 
                                 nhead=8, num_encoder_layers=12, dropout=dropout, 
                                 window_size=4, Spatial_FFN_hidden_ratio=4, rpe=rpe).to(device)
 
     optimizer_D = None
-    #optimizer_D = torch.optim.Adam(params = VPTR_Disc.parameters(), lr = Transformer_lr, betas = (0.5, 0.999))
+    # optimizer_D = torch.optim.Adam(params = VPTR_Disc.parameters(), lr = Transformer_lr, betas = (0.5, 0.999))
     optimizer_T = torch.optim.AdamW(params = VPTR_Transformer.parameters(), lr = Transformer_lr)
 
     Transformer_parameters = sum(p.numel() for p in VPTR_Transformer.parameters() if p.requires_grad)
@@ -208,7 +209,7 @@ if __name__ == '__main__':
 
     #####################Init loss function###########################
     loss_name_list = ['T_MSE', 'T_GDL', 'T_gan', 'T_total', 'Dtotal', 'Dfake', 'Dreal']
-    #gan_loss = GANLoss('vanilla', target_real_label=1.0, target_fake_label=0.0).to(device)
+    gan_loss = GANLoss('vanilla', target_real_label=1.0, target_fake_label=0.0).to(device)
     loss_dict = init_loss_dict(loss_name_list)
     mse_loss = MSELoss()
     gdl_loss = GDL(alpha = 1)
@@ -231,9 +232,14 @@ if __name__ == '__main__':
         EpochAveMeter = AverageMeters(loss_name_list)
         for idx, sample in enumerate(train_loader, 0):
             print(f"training {idx}", flush=True)
+            start = time.time()
             iter_loss_dict = single_iter(VPTR_Enc, VPTR_Dec, VPTR_Disc, VPTR_Transformer, optimizer_T, optimizer_D, sample, device, lam_gan, train_flag = True)
+            end = time.time()
+            print(f"time taken {end - start}", flush=True)
+
             EpochAveMeter.iter_update(iter_loss_dict)
-            
+            print(iter_loss_dict)
+
         loss_dict = EpochAveMeter.epoch_update(loss_dict, epoch, train_flag = True)
         write_summary(summary_writer, loss_dict, train_flag = True)
         FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_future_frames, sample, ckpt_save_dir.joinpath(f'train_gifs_epoch{epoch}'), test_phase = False)
@@ -244,6 +250,7 @@ if __name__ == '__main__':
             for idx, sample in enumerate(val_loader, 0):
                 iter_loss_dict = single_iter(VPTR_Enc, VPTR_Dec, VPTR_Disc, VPTR_Transformer, optimizer_T, optimizer_D, sample, device, lam_gan, train_flag = False)
                 EpochAveMeter.iter_update(iter_loss_dict)
+                break 
 
             loss_dict = EpochAveMeter.epoch_update(loss_dict, epoch, train_flag = False)
             write_summary(summary_writer, loss_dict, train_flag = False)
