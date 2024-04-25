@@ -31,7 +31,7 @@ class VPTREnc(nn.Module):
 class VPTRDec(nn.Module):
     def __init__(self, img_channels, ngf=64, feat_dim = 528, n_downsampling = 3, out_layer = 'Tanh', padding_type = 'reflect'):
         super().__init__()
-        self.decoder = ResnetDecoder(output_nc = img_channels, feat_dim = feat_dim, n_downsampling = n_downsampling, out_layer = out_layer, padding_type = padding_type)
+        self.decoder = ResnetDecoder(output_nc = img_channels, ngf=ngf, feat_dim = feat_dim, n_downsampling = n_downsampling, out_layer = out_layer, padding_type = padding_type)
 
     def forward(self, feat):
         """

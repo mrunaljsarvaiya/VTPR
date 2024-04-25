@@ -93,6 +93,8 @@ class ResnetDecoder(nn.Module):
             model += [nn.Tanh()]
         elif out_layer == 'Sigmoid':
             model += [nn.Sigmoid()]
+        elif out_layer == 'ReLU':
+            model += [nn.LeakyReLU()]
         else:
             raise ValueError("Unsupported output layer")
 
