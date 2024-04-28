@@ -43,6 +43,9 @@ class MultiheadAttention(Module):
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
+        print(f"head dim {self.head_dim}")
+        print(f"num heads dim {self.num_heads}")
+        print(f"embed dim {self.embed_dim}")
         assert (
             self.head_dim * num_heads == self.embed_dim
         ), "embed_dim must be divisible by num_heads"

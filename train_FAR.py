@@ -140,10 +140,10 @@ def FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_pred, sample, save
 
 if __name__ == '__main__':
     set_seed(2021)
-    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_past_10_future_11_color_ckpt')
-    tensorboard_save_dir = Path('/scratch/ms14625/VTPR//VPTR_ckpts/blocks_FAR_past_10_future_11_color_tensorboard')
+    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_past_10_future_11_color_continue2_lowlr_ckpt')
+    tensorboard_save_dir = Path('/scratch/ms14625/VTPR//VPTR_ckpts/blocks_FAR_past_10_future_11_continue2__lowlr_color_tensorboard')
     resume_AE_ckpt = '/scratch/ms14625/VTPR/VPTR_ckpts/blocks_AE_past_10_future_11_color_ckpt/epoch_6.tar'
-    resume_ckpt = None
+    resume_ckpt = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_past_10_future_11_color_continue2_ckpt/epoch_6.tar')
 
     #############Set the logger#########
     if not Path(ckpt_save_dir).exists():
@@ -160,10 +160,10 @@ if __name__ == '__main__':
     num_future_frames = 11
     encH, encW, encC = 20, 30, 528
     img_channels = 3 #3 channels for BAIR
-    epochs = 3
+    epochs = 20
     N = 2
     #AE_lr = 2e-4
-    Transformer_lr = 1e-4
+    Transformer_lr = 0.3e-4
     max_grad_norm = 1.0 
     rpe = False
     lam_gan = 0.001
@@ -227,7 +227,7 @@ if __name__ == '__main__':
     #####################Train ################################
     for epoch in range(start_epoch+1, start_epoch + epochs+1):
         epoch_st = datetime.now()
-        
+        print(f"epoch {epoch}")        
         #Train
         EpochAveMeter = AverageMeters(loss_name_list)
         for idx, sample in enumerate(train_loader, 0):
@@ -239,6 +239,11 @@ if __name__ == '__main__':
 
             EpochAveMeter.iter_update(iter_loss_dict)
             print(iter_loss_dict)
+
+            if idx > 500 and idx % 500 == 0 :
+                print("saving gif")
+                FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_future_frames, sample, ckpt_save_dir.joinpath(f'train_gifs_{idx}_epoch{epoch}'), test_phase = False)
+                FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_future_frames, sample, ckpt_save_dir.joinpath(f'test_gifs_{idx}_epoch{epoch}'), test_phase = True)
 
         loss_dict = EpochAveMeter.epoch_update(loss_dict, epoch, train_flag = True)
         write_summary(summary_writer, loss_dict, train_flag = True)
