@@ -6,6 +6,8 @@ from torch.utils.data import Dataset, DataLoader, random_split
 from torch.utils.tensorboard import SummaryWriter
 import torch.nn.functional as F
 import time 
+import matplotlib.pyplot as plt
+import numpy as np 
 
 from pathlib import Path
 import random
@@ -17,6 +19,8 @@ from utils import KTHDataset, BAIRDataset, MovingMNISTDataset
 from utils import get_dataloader
 from utils import visualize_batch_clips, save_ckpt, load_ckpt, set_seed, AverageMeters, init_loss_dict, write_summary, resume_training
 from utils import set_seed
+from rrunet import RR_UNET 
+from torchmetrics import JaccardIndex
 
 import logging
 
@@ -101,49 +105,33 @@ def single_iter(VPTR_Enc, VPTR_Dec, VPTR_Disc, VPTR_Transformer, optimizer_T, op
     
     return iter_loss_dict
 
-def FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_pred, sample, save_dir, test_phase = True):
-    VPTR_Transformer = VPTR_Transformer.eval()
+def FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, past_frames, num_pred=11):
     with torch.no_grad():
-        past_frames, future_frames = sample
         past_frames = past_frames.to(device)
-        future_frames = future_frames.to(device)
-
         past_gt_feats = VPTR_Enc(past_frames)
-        future_gt_feats = VPTR_Enc(future_frames)
     
-        if test_phase:
-            pred_feats = VPTR_Transformer(past_gt_feats)
-            for i in range(num_pred-1):
-                if i == 0:
-                    input_feats = torch.cat([past_gt_feats, pred_feats[:, -1:, ...]], dim = 1)
-                else:
-                    pred_future_frame = VPTR_Dec(pred_feats[:, -1:, ...])
-                    pred_future_feat = VPTR_Enc(pred_future_frame)
-                    input_feats = torch.cat([input_feats, pred_future_feat], dim = 1)
+        pred_feats = VPTR_Transformer(past_gt_feats)
+        for i in range(num_pred-1):
+            if i == 0:
+                input_feats = torch.cat([past_gt_feats, pred_feats[:, -1:, ...]], dim = 1)
+            else:
+                pred_future_frame = VPTR_Dec(pred_feats[:, -1:, ...])
+                pred_future_feat = VPTR_Enc(pred_future_frame)
+                input_feats = torch.cat([input_feats, pred_future_feat], dim = 1)
 
-                pred_feats = VPTR_Transformer(input_feats)
-        else:
-            input_feats = torch.cat([past_gt_feats, future_gt_feats[:, 0:-1, ...]], dim = 1)
             pred_feats = VPTR_Transformer(input_feats)
     
-        pred_frames = VPTR_Dec(pred_feats)
-
-    pred_past_frames = pred_frames[:, 0:-num_pred, ...]
-    pred_future_frames = pred_frames[:, -num_pred:, ...]
-    N = pred_future_frames.shape[0]
-    # idx = min(N, 4)
-    idx = 10
     
-    visualize_batch_clips(past_frames[0:idx, :, ...], future_frames[0:idx, :, ...], pred_future_frames[0:idx, :, ...], save_dir, renorm_transform, desc = 'pred_future')
-    # visualize_batch_clips(past_frames[0:idx, 1:, ...], pred_past_frames[0:idx, :, ...], pred_future_frames[0:idx, :-1, ...], save_dir, renorm_transform, desc = 'pred_past')
-
+        pred_frames = VPTR_Dec(pred_feats)
+    
+    return pred_frames[:, -1, :, :, :]
 
 if __name__ == '__main__':
     set_seed(2021)
-    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_past_10_future_11_color_continue2_lowerlr_lowdropout_ckpt')
-    tensorboard_save_dir = Path('/scratch/ms14625/VTPR//VPTR_ckpts/blocks_FAR_past_10_future_11_continue2_lowerlr_lowdropout_color_tensorboard')
+    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/temp')
+    tensorboard_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/temp_tensorboard')
     resume_AE_ckpt = '/scratch/ms14625/VTPR/VPTR_ckpts/blocks_AE_past_10_future_11_color_ckpt/epoch_6.tar'
-    resume_ckpt = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_past_10_future_11_color_continue2_lowlr_ckpt/epoch_7.tar')
+    resume_ckpt = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_past_10_future_11_color_continue2_lowerlr_lowdropout_ckpt/epoch_11.tar')
 
     #############Set the logger#########
     if not Path(ckpt_save_dir).exists():
@@ -161,21 +149,21 @@ if __name__ == '__main__':
     encH, encW, encC = 20, 30, 528
     img_channels = 3 #3 channels for BAIR
     epochs = 20
-    N = 2
+    N = 1
     #AE_lr = 2e-4
-    Transformer_lr = 0.09e-4
+    Transformer_lr = 1e-4
     max_grad_norm = 1.0 
     rpe = False
     lam_gan = 0.001
-    dropout = 0.05
-    device = torch.device('cuda')
+    dropout = 0.1
+    device = torch.device('cpu')
     val_per_epochs = 1
     ngf = 128
     
     #####################Init Dataset ###########################
-    data_set_name = 'BLOCKS' #see utils.dataset
-    # dataset_dir = '/home/mrunal/Documents/NYUCourses/DeepLearning/project/VPTR/data/blocks/dataset/unlabeled'
+    data_set_name = 'BLOCKS_TEST' #see utils.dataset
     dataset_dir = '/scratch/ms14625/VTPR/data/blocks/dataset/unlabeled'
+    # dataset_dir = '/scratch/ms14625/VTPR/data/blocks/dataset/unlabeled'
     test_past_frames = 10
     test_future_frames = 11
     train_loader, val_loader, test_loader, renorm_transform = get_dataloader(data_set_name, N, dataset_dir, test_past_frames, test_future_frames, bw=False)
@@ -215,7 +203,7 @@ if __name__ == '__main__':
     gdl_loss = GDL(alpha = 1)
 
     #load the trained autoencoder, we initialize the discriminator from scratch, for a balanced training
-    loss_dict, start_epoch = resume_training({'VPTR_Enc': VPTR_Enc, 'VPTR_Dec': VPTR_Dec}, {}, resume_AE_ckpt, loss_name_list)
+    loss_dict, start_epoch = resume_training({'VPTR_Enc': VPTR_Enc, 'VPTR_Dec': VPTR_Dec}, {}, resume_AE_ckpt, loss_name_list, map_location='cpu')
 
     start_epoch = 0 
 
@@ -224,51 +212,96 @@ if __name__ == '__main__':
                                                 {'optimizer_T':optimizer_T}, resume_ckpt, loss_name_list)
     
         print("LOADED")
-    #####################Train ################################
-    for epoch in range(start_epoch+1, start_epoch + epochs+1):
-        epoch_st = datetime.now()
-        print(f"epoch {epoch}")        
-        #Train
-        EpochAveMeter = AverageMeters(loss_name_list)
-        for idx, sample in enumerate(train_loader, 0):
-            print(f"training {idx}", flush=True)
-            start = time.time()
-            iter_loss_dict = single_iter(VPTR_Enc, VPTR_Dec, VPTR_Disc, VPTR_Transformer, optimizer_T, optimizer_D, sample, device, lam_gan, train_flag = True)
-            end = time.time()
-            print(f"time taken {end - start}", flush=True)
+    
+    VPTR_Transformer = VPTR_Transformer.eval()
 
-            EpochAveMeter.iter_update(iter_loss_dict)
-            print(iter_loss_dict)
 
-            if idx > 500 and idx % 500 == 0 :
-                print("saving gif")
-                FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_future_frames, sample, ckpt_save_dir.joinpath(f'train_gifs_{idx}_epoch{epoch}'), test_phase = False)
-                FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_future_frames, sample, ckpt_save_dir.joinpath(f'test_gifs_{idx}_epoch{epoch}'), test_phase = True)
+    # Load segmentation model 
+    seg_model = RR_UNET(3, 49).to(device)
+    seg_model = torch.load("/scratch/ms14625/VTPR/rrunet_checkpoint.pt", map_location='cpu').to(device)
 
-        loss_dict = EpochAveMeter.epoch_update(loss_dict, epoch, train_flag = True)
-        write_summary(summary_writer, loss_dict, train_flag = True)
-        FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_future_frames, sample, ckpt_save_dir.joinpath(f'train_gifs_epoch{epoch}'), test_phase = False)
+    # unnormalize data
+    past_frames, future_frames, masks =  next(iter(test_loader))
+    test_img = past_frames[0, :, :, :, :].to(device) # N, C, W, H
+    orig_img = renorm_transform(test_img)
 
-        if epoch % val_per_epochs == 0:   
-            #validation
-            EpochAveMeter = AverageMeters(loss_name_list)
-            for idx, sample in enumerate(val_loader, 0):
-                iter_loss_dict = single_iter(VPTR_Enc, VPTR_Dec, VPTR_Disc, VPTR_Transformer, optimizer_T, optimizer_D, sample, device, lam_gan, train_flag = False)
-                EpochAveMeter.iter_update(iter_loss_dict)
-                break 
+    # apply normalization in rrunet
+    trans = transforms.Normalize(mean=[0.5002, 0.4976, 0.4945], std=[0.0555, 0.0547, 0.0566])  # Standard normalization
+    test_img = trans(orig_img).to(device)
 
-            loss_dict = EpochAveMeter.epoch_update(loss_dict, epoch, train_flag = False)
-            write_summary(summary_writer, loss_dict, train_flag = False)
+
+    # run segmentation
+    # seg = seg_model(test_img.unsqueeze(0))
+    # seg = torch.argmax(seg, dim=1).detach().cpu()
+    # seg = np.transpose(imgs[0, :, :, :].cpu(),  (1, 2, 0))
+    # orig_img = np.transpose(orig_imgs[0, :, :, :].cpu(),  (1, 2, 0))
+    # axarr[0].imshow(orig_img.numpy())
+    
+    predicted_seg_list = []
+    gt_seg_list = []
+    truth_seg_list = []
+    jaccard = JaccardIndex(task="multiclass", num_classes=49).to(device)
+    gt_avg = 0
+    predicted_avg = 0
+    count = 0 
+
+    seg_model.eval()
+    with torch.no_grad():
+        for past_frames, future_frames, masks in test_loader:
+            masks = masks.to(device)
+
+            # use VTPR to get last img 
+            predicted_last_frame = FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, past_frames)
+            assert len(predicted_last_frame.shape) == 4 
+            predicted_last_frame_unnorm = renorm_transform(predicted_last_frame)
             
-            for idx, sample in enumerate(test_loader, random.randint(0, len(test_loader) - 1)):
-                FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_future_frames, sample, ckpt_save_dir.joinpath(f'test_gifs_epoch{epoch}'), test_phase = True)
-                break
-        
-        save_ckpt({'VPTR_Transformer': VPTR_Transformer}, 
-                {'optimizer_T': optimizer_T}, 
-                epoch, loss_dict, ckpt_save_dir)
+            gt_last_frame = future_frames[:, -1, :, :, :].to(device) # batch_size, C, W, H
+            assert len(gt_last_frame.shape) == 4 
+            gt_last_frame_unnorm = renorm_transform(gt_last_frame)
 
-        epoch_time = datetime.now() - epoch_st
+            # apply normalization in rrunet
+            trans = transforms.Compose([
+                transforms.Pad(padding=(0, 40), padding_mode='edge'),  # Only pad width
+                # transforms.Resize((256, 256)),  # Resize the now square image to 256x256
+                # transforms.ToTensor(),
+                transforms.Normalize(mean=[0.5002, 0.4976, 0.4945], std=[0.0555, 0.0547, 0.0566])  # Standard normalization
+            ])
+            gt_last_frame = trans(gt_last_frame_unnorm).to(device)
+            predicted_last_frame = trans(predicted_last_frame_unnorm).to(device)
 
-        print(f"epoch {epoch}, {EpochAveMeter.meters['T_total']}")
-        print(f"Estimated remaining training time: {epoch_time.total_seconds()/3600. * (start_epoch + epochs - epoch)} Hours")
+            # Find gt frame segmentation result
+            gt_seg = seg_model(gt_last_frame).to(device)
+            gt_seg = torch.argmax(gt_seg, dim=1)
+            gt_seg = gt_seg.unsqueeze(1)
+            # gt_seg_list.append(gt_seg)
+            assert len(gt_seg.shape) == 4 
+            assert gt_seg.shape[1] == 1
+
+            # gt mask
+            truth_seg_list.append(masks[:, -1, :, :].unsqueeze(1))
+                        
+            # find predicted frame segmentation result 
+            predicted_outputs = seg_model(predicted_last_frame).to(device)
+            predicted_outputs = torch.argmax(predicted_outputs, dim=1)
+            predicted_outputs = predicted_outputs.unsqueeze(1)
+            predicted_seg_list.append(predicted_outputs)
+            assert len(predicted_outputs.shape) == 4 
+            assert predicted_outputs.shape[1] == 1
+
+            import pdb; pdb.set_trace()
+
+            # predicted_orig_img = torch.permute(predicted_last_frame_unnorm[0, :, :, :],  (1, 2, 0))
+           
+            # f, axarr = plt.subplots(4,1)
+            # axarr[0].imshow(orig_img.numpy())    
+            # axarr[1].imshow(gt_seg_list[-1].squeeze(0).cpu().numpy())
+            # axarr[2].imshow(predicted_orig_img.numpy())    
+            # axarr[3].imshow(predicted_seg_list[-1].squeeze(0).cpu().numpy())
+            # plt.show()
+            # plt.close() 
+
+
+    sample_all_outputs = torch.cat(predicted_seg_list, dim=0)
+    sample_all_truth = torch.cat(truth_seg_list, dim=0)
+    res = jaccard(sample_all_outputs, sample_all_truth)
+    print(f"res {res}", flush=True)    

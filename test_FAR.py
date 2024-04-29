@@ -17,6 +17,7 @@ from utils import KTHDataset, BAIRDataset, MovingMNISTDataset
 from utils import get_dataloader
 from utils import visualize_batch_clips, save_ckpt, load_ckpt, set_seed, AverageMeters, init_loss_dict, write_summary, resume_training
 from utils import set_seed
+from rru_net import RR_UNET 
 
 import logging
 
@@ -140,10 +141,10 @@ def FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_pred, sample, save
 
 if __name__ == '__main__':
     set_seed(2021)
-    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_past_10_future_11_color_continue2_lowerlr_lowdropout_ckpt')
-    tensorboard_save_dir = Path('/scratch/ms14625/VTPR//VPTR_ckpts/blocks_FAR_past_10_future_11_continue2_lowerlr_lowdropout_color_tensorboard')
+    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_past_10_future_11_color_continue2_ckpt')
+    tensorboard_save_dir = Path('/scratch/ms14625/VTPR//VPTR_ckpts/blocks_FAR_past_10_future_11_continue2_color_tensorboard')
     resume_AE_ckpt = '/scratch/ms14625/VTPR/VPTR_ckpts/blocks_AE_past_10_future_11_color_ckpt/epoch_6.tar'
-    resume_ckpt = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_past_10_future_11_color_continue2_lowlr_ckpt/epoch_7.tar')
+    resume_ckpt = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_past_10_future_11_color_continue_ckpt/epoch_4.tar')
 
     #############Set the logger#########
     if not Path(ckpt_save_dir).exists():
@@ -163,11 +164,11 @@ if __name__ == '__main__':
     epochs = 20
     N = 2
     #AE_lr = 2e-4
-    Transformer_lr = 0.09e-4
+    Transformer_lr = 1e-4
     max_grad_norm = 1.0 
     rpe = False
     lam_gan = 0.001
-    dropout = 0.05
+    dropout = 0.1
     device = torch.device('cuda')
     val_per_epochs = 1
     ngf = 128
@@ -224,51 +225,6 @@ if __name__ == '__main__':
                                                 {'optimizer_T':optimizer_T}, resume_ckpt, loss_name_list)
     
         print("LOADED")
-    #####################Train ################################
-    for epoch in range(start_epoch+1, start_epoch + epochs+1):
-        epoch_st = datetime.now()
-        print(f"epoch {epoch}")        
-        #Train
-        EpochAveMeter = AverageMeters(loss_name_list)
-        for idx, sample in enumerate(train_loader, 0):
-            print(f"training {idx}", flush=True)
-            start = time.time()
-            iter_loss_dict = single_iter(VPTR_Enc, VPTR_Dec, VPTR_Disc, VPTR_Transformer, optimizer_T, optimizer_D, sample, device, lam_gan, train_flag = True)
-            end = time.time()
-            print(f"time taken {end - start}", flush=True)
-
-            EpochAveMeter.iter_update(iter_loss_dict)
-            print(iter_loss_dict)
-
-            if idx > 500 and idx % 500 == 0 :
-                print("saving gif")
-                FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_future_frames, sample, ckpt_save_dir.joinpath(f'train_gifs_{idx}_epoch{epoch}'), test_phase = False)
-                FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_future_frames, sample, ckpt_save_dir.joinpath(f'test_gifs_{idx}_epoch{epoch}'), test_phase = True)
-
-        loss_dict = EpochAveMeter.epoch_update(loss_dict, epoch, train_flag = True)
-        write_summary(summary_writer, loss_dict, train_flag = True)
-        FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_future_frames, sample, ckpt_save_dir.joinpath(f'train_gifs_epoch{epoch}'), test_phase = False)
-
-        if epoch % val_per_epochs == 0:   
-            #validation
-            EpochAveMeter = AverageMeters(loss_name_list)
-            for idx, sample in enumerate(val_loader, 0):
-                iter_loss_dict = single_iter(VPTR_Enc, VPTR_Dec, VPTR_Disc, VPTR_Transformer, optimizer_T, optimizer_D, sample, device, lam_gan, train_flag = False)
-                EpochAveMeter.iter_update(iter_loss_dict)
-                break 
-
-            loss_dict = EpochAveMeter.epoch_update(loss_dict, epoch, train_flag = False)
-            write_summary(summary_writer, loss_dict, train_flag = False)
-            
-            for idx, sample in enumerate(test_loader, random.randint(0, len(test_loader) - 1)):
-                FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_future_frames, sample, ckpt_save_dir.joinpath(f'test_gifs_epoch{epoch}'), test_phase = True)
-                break
-        
-        save_ckpt({'VPTR_Transformer': VPTR_Transformer}, 
-                {'optimizer_T': optimizer_T}, 
-                epoch, loss_dict, ckpt_save_dir)
-
-        epoch_time = datetime.now() - epoch_st
-
-        print(f"epoch {epoch}, {EpochAveMeter.meters['T_total']}")
-        print(f"Estimated remaining training time: {epoch_time.total_seconds()/3600. * (start_epoch + epochs - epoch)} Hours")
+    
+    # Load segmentation model 
+    seg_model = RR_UNET(3, 49).to(device)

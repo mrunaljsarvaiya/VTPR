@@ -107,8 +107,8 @@ def show_samples(VPTR_Enc, VPTR_Dec, sample, save_dir, renorm_transform):
         visualize_batch_clips(past_frames[0:idx, :, ...], rec_future_frames[0:idx, :, ...], rec_past_frames[0:idx, :, ...], save_dir, renorm_transform, desc = 'ae')
 
 if __name__ == '__main__':
-    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_AE_past_10_future_11_color_ckpt')
-    tensorboard_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_AE_past_10_future_11_color_tensorboard')
+    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_AE_past_10_future_11_bw_ckpt')
+    tensorboard_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_AE_past_10_future_11_bw_tensorboard')
 
     #resume_ckpt = ckpt_save_dir.joinpath('epoch_45.tar')
     resume_ckpt = None
@@ -118,12 +118,12 @@ if __name__ == '__main__':
     num_past_frames = 10
     num_future_frames = 11
     # encH, encW, encC = 8, 8, 528
-    encH, encW, encC = 8, 8, 128
-    img_channels = 3 #channels for BAIR datset
+    encH, encW, encC = 8, 8, 528
+    img_channels = 1 #channels for BAIR datset
     n_downsampling = 3 # OG is 3
     ngf = 128
     epochs = 30 # 50
-    N = 2
+    N = 4
     AE_lr = 2e-4
     lam_gan = 0.01
     device = torch.device('cuda')
@@ -136,7 +136,7 @@ if __name__ == '__main__':
     # data_set_name = 'MNIST' #see utils.dataset
     # dataset_dir = '/home/mrunal/Documents/NYUCourses/DeepLearning/project/VPTR/data/moving-mnist-example/'
   
-    train_loader, val_loader, test_loader, renorm_transform = get_dataloader(data_set_name, N, dataset_dir, num_past_frames, num_future_frames, ngpus=1, bw=False)
+    train_loader, val_loader, test_loader, renorm_transform = get_dataloader(data_set_name, N, dataset_dir, num_past_frames, num_future_frames, ngpus=1, bw=True)
 
     print(f"num train loader {len(train_loader)}")
     print(len(val_loader))
@@ -194,7 +194,7 @@ if __name__ == '__main__':
             print(f"time taken {end - start}", flush=True)
             print(iter_loss_dict)
             EpochAveMeter.iter_update(iter_loss_dict)
-            
+
         loss_dict = EpochAveMeter.epoch_update(loss_dict, epoch, train_flag = True)
         write_summary(summary_writer, loss_dict, train_flag = True)
         

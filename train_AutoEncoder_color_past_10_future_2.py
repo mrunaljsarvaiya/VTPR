@@ -107,8 +107,8 @@ def show_samples(VPTR_Enc, VPTR_Dec, sample, save_dir, renorm_transform):
         visualize_batch_clips(past_frames[0:idx, :, ...], rec_future_frames[0:idx, :, ...], rec_past_frames[0:idx, :, ...], save_dir, renorm_transform, desc = 'ae')
 
 if __name__ == '__main__':
-    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_AE_past_10_future_11_color_ckpt')
-    tensorboard_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_AE_past_10_future_11_color_tensorboard')
+    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_AE_past_10_future_2_color_ckpt')
+    tensorboard_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_AE_past_10_future_2_color_tensorboard')
 
     #resume_ckpt = ckpt_save_dir.joinpath('epoch_45.tar')
     resume_ckpt = None
@@ -116,14 +116,14 @@ if __name__ == '__main__':
 
     summary_writer = SummaryWriter(tensorboard_save_dir.absolute().as_posix())
     num_past_frames = 10
-    num_future_frames = 11
+    num_future_frames = 2
     # encH, encW, encC = 8, 8, 528
-    encH, encW, encC = 8, 8, 128
+    encH, encW, encC = 8, 8, 528
     img_channels = 3 #channels for BAIR datset
     n_downsampling = 3 # OG is 3
     ngf = 128
     epochs = 30 # 50
-    N = 2
+    N = 8
     AE_lr = 2e-4
     lam_gan = 0.01
     device = torch.device('cuda')

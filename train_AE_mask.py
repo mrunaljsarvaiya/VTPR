@@ -44,8 +44,8 @@ def cal_lossG(VPTR_Disc, fake_imgs, real_imgs, lam_gan):
 
 def single_iter(VPTR_Enc, VPTR_Dec, VPTR_Disc, optimizer_G, optimizer_D, sample, device, train_flag = True):
     past_frames, future_frames = sample
-    past_frames = past_frames.to(device)
-    future_frames = future_frames.to(device)
+    past_frames = past_frames.to(device).unsqueeze(2)
+    future_frames = future_frames.to(device).unsqueeze(2)
     x = torch.cat([past_frames, future_frames], dim = 1)
     
     if train_flag:
@@ -91,8 +91,8 @@ def show_samples(VPTR_Enc, VPTR_Dec, sample, save_dir, renorm_transform):
     VPTR_Dec = VPTR_Dec.eval()
     with torch.no_grad():
         past_frames, future_frames = sample
-        past_frames = past_frames.to(device)
-        future_frames = future_frames.to(device)
+        past_frames = past_frames.to(device).unsqueeze(2)
+        future_frames = future_frames.to(device).unsqueeze(2)
 
         past_gt_feats = VPTR_Enc(past_frames)
         future_gt_feats = VPTR_Enc(future_frames)
@@ -107,8 +107,8 @@ def show_samples(VPTR_Enc, VPTR_Dec, sample, save_dir, renorm_transform):
         visualize_batch_clips(past_frames[0:idx, :, ...], rec_future_frames[0:idx, :, ...], rec_past_frames[0:idx, :, ...], save_dir, renorm_transform, desc = 'ae')
 
 if __name__ == '__main__':
-    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_AE_past_10_future_11_color_ckpt')
-    tensorboard_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_AE_past_10_future_11_color_tensorboard')
+    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_AE_mask_only_N8_ckpt')
+    tensorboard_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_AE_mask_only_N8_tensorboard')
 
     #resume_ckpt = ckpt_save_dir.joinpath('epoch_45.tar')
     resume_ckpt = None
@@ -118,20 +118,20 @@ if __name__ == '__main__':
     num_past_frames = 10
     num_future_frames = 11
     # encH, encW, encC = 8, 8, 528
-    encH, encW, encC = 8, 8, 128
-    img_channels = 3 #channels for BAIR datset
+    encH, encW, encC = 8, 8, 528
+    img_channels = 1 #channels for BAIR datset
     n_downsampling = 3 # OG is 3
     ngf = 128
-    epochs = 30 # 50
-    N = 2
+    epochs = 20 # 50
+    N = 8
     AE_lr = 2e-4
     lam_gan = 0.01
     device = torch.device('cuda')
 
     #####################Init Dataset ###########################
-    data_set_name = 'BLOCKS' #see utils.dataset
+    data_set_name = 'BLOCKS_MASK' #see utils.dataset
     # dataset_dir = '/home/mrunal/Documents/NYUCourses/DeepLearning/project/VPTR/data/blocks/dataset/unlabeled'
-    dataset_dir = '/scratch/ms14625/VTPR/data/blocks/dataset/unlabeled'
+    dataset_dir = '/scratch/ms14625/VTPR/data/blocks/dataset/mask_unlabeled/unlabeled'
 
     # data_set_name = 'MNIST' #see utils.dataset
     # dataset_dir = '/home/mrunal/Documents/NYUCourses/DeepLearning/project/VPTR/data/moving-mnist-example/'

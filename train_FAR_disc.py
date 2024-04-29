@@ -140,10 +140,10 @@ def FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_pred, sample, save
 
 if __name__ == '__main__':
     set_seed(2021)
-    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_past_10_future_11_color_continue2_lowerlr_lowdropout_ckpt')
-    tensorboard_save_dir = Path('/scratch/ms14625/VTPR//VPTR_ckpts/blocks_FAR_past_10_future_11_continue2_lowerlr_lowdropout_color_tensorboard')
+    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_past_10_future_11_color_disc_ckpt')
+    tensorboard_save_dir = Path('/scratch/ms14625/VTPR//VPTR_ckpts/blocks_FAR_past_10_future_11_color_disc_tensorboard')
     resume_AE_ckpt = '/scratch/ms14625/VTPR/VPTR_ckpts/blocks_AE_past_10_future_11_color_ckpt/epoch_6.tar'
-    resume_ckpt = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_past_10_future_11_color_continue2_lowlr_ckpt/epoch_7.tar')
+    resume_ckpt = None
 
     #############Set the logger#########
     if not Path(ckpt_save_dir).exists():
@@ -160,14 +160,14 @@ if __name__ == '__main__':
     num_future_frames = 11
     encH, encW, encC = 20, 30, 528
     img_channels = 3 #3 channels for BAIR
-    epochs = 20
+    epochs = 3
     N = 2
     #AE_lr = 2e-4
-    Transformer_lr = 0.09e-4
+    Transformer_lr = 1e-4
     max_grad_norm = 1.0 
     rpe = False
     lam_gan = 0.001
-    dropout = 0.05
+    dropout = 0.1
     device = torch.device('cuda')
     val_per_epochs = 1
     ngf = 128
@@ -190,9 +190,9 @@ if __name__ == '__main__':
     VPTR_Dec = VPTR_Dec.eval()
 
     VPTR_Disc = None
-    # VPTR_Disc = VPTRDisc(img_channels, ndf=64, n_layers=3, norm_layer=nn.BatchNorm2d).to(device)
-    # VPTR_Disc = VPTR_Disc.eval()
-    # init_weights(VPTR_Disc, init_type='kaiming')
+    VPTR_Disc = VPTRDisc(img_channels, ndf=64, n_layers=3, norm_layer=nn.BatchNorm2d).to(device)
+    VPTR_Disc = VPTR_Disc.eval()
+    init_weights(VPTR_Disc, init_type='kaiming')
     init_weights(VPTR_Enc)
     init_weights(VPTR_Dec)
 
@@ -201,7 +201,7 @@ if __name__ == '__main__':
                                 window_size=4, Spatial_FFN_hidden_ratio=4, rpe=rpe).to(device)
 
     optimizer_D = None
-    # optimizer_D = torch.optim.Adam(params = VPTR_Disc.parameters(), lr = Transformer_lr, betas = (0.5, 0.999))
+    optimizer_D = torch.optim.Adam(params = VPTR_Disc.parameters(), lr = Transformer_lr, betas = (0.5, 0.999))
     optimizer_T = torch.optim.AdamW(params = VPTR_Transformer.parameters(), lr = Transformer_lr)
 
     Transformer_parameters = sum(p.numel() for p in VPTR_Transformer.parameters() if p.requires_grad)
@@ -227,7 +227,7 @@ if __name__ == '__main__':
     #####################Train ################################
     for epoch in range(start_epoch+1, start_epoch + epochs+1):
         epoch_st = datetime.now()
-        print(f"epoch {epoch}")        
+        
         #Train
         EpochAveMeter = AverageMeters(loss_name_list)
         for idx, sample in enumerate(train_loader, 0):
@@ -240,7 +240,7 @@ if __name__ == '__main__':
             EpochAveMeter.iter_update(iter_loss_dict)
             print(iter_loss_dict)
 
-            if idx > 500 and idx % 500 == 0 :
+            if idx == 0 or idx % 500 == 0 :
                 print("saving gif")
                 FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_future_frames, sample, ckpt_save_dir.joinpath(f'train_gifs_{idx}_epoch{epoch}'), test_phase = False)
                 FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_future_frames, sample, ckpt_save_dir.joinpath(f'test_gifs_{idx}_epoch{epoch}'), test_phase = True)

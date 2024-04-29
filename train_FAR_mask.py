@@ -48,8 +48,8 @@ def cal_lossT(fake_imgs, real_imgs, VPTR_Disc, lam_gan):
 
 def single_iter(VPTR_Enc, VPTR_Dec, VPTR_Disc, VPTR_Transformer, optimizer_T, optimizer_D, sample, device, lam_gan, train_flag = True):
     past_frames, future_frames = sample
-    past_frames = past_frames.to(device)
-    future_frames = future_frames.to(device)
+    past_frames = past_frames.to(device).unsqueeze(2)
+    future_frames = future_frames.to(device).unsqueeze(2)
     
     with torch.no_grad():
         x = torch.cat([past_frames, future_frames[:, 0:-1, ...]], dim = 1)
@@ -105,8 +105,8 @@ def FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_pred, sample, save
     VPTR_Transformer = VPTR_Transformer.eval()
     with torch.no_grad():
         past_frames, future_frames = sample
-        past_frames = past_frames.to(device)
-        future_frames = future_frames.to(device)
+        past_frames = past_frames.to(device).unsqueeze(2)
+        future_frames = future_frames.to(device).unsqueeze(2)
 
         past_gt_feats = VPTR_Enc(past_frames)
         future_gt_feats = VPTR_Enc(future_frames)
@@ -140,10 +140,11 @@ def FAR_show_sample(VPTR_Enc, VPTR_Dec, VPTR_Transformer, num_pred, sample, save
 
 if __name__ == '__main__':
     set_seed(2021)
-    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_past_10_future_11_color_continue2_lowerlr_lowdropout_ckpt')
-    tensorboard_save_dir = Path('/scratch/ms14625/VTPR//VPTR_ckpts/blocks_FAR_past_10_future_11_continue2_lowerlr_lowdropout_color_tensorboard')
-    resume_AE_ckpt = '/scratch/ms14625/VTPR/VPTR_ckpts/blocks_AE_past_10_future_11_color_ckpt/epoch_6.tar'
-    resume_ckpt = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_past_10_future_11_color_continue2_lowlr_ckpt/epoch_7.tar')
+    ckpt_save_dir = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_mask_ep4_ckpt')
+    tensorboard_save_dir = Path('/scratch/ms14625/VTPR//VPTR_ckpts/blocks_FAR_mask_ep4_tensorboard')
+    resume_AE_ckpt = '/scratch/ms14625/VTPR/VPTR_ckpts/blocks_AE_mask_only_ckpt/epoch_4.tar'
+    resume_ckpt = None
+    # resume_ckpt = Path('/scratch/ms14625/VTPR/VPTR_ckpts/blocks_FAR_past_10_future_11_color_continue2_lowlr_ckpt/epoch_7.tar')
 
     #############Set the logger#########
     if not Path(ckpt_save_dir).exists():
@@ -159,11 +160,11 @@ if __name__ == '__main__':
     num_past_frames = 10
     num_future_frames = 11
     encH, encW, encC = 20, 30, 528
-    img_channels = 3 #3 channels for BAIR
+    img_channels = 1 #3 channels for BAIR
     epochs = 20
     N = 2
     #AE_lr = 2e-4
-    Transformer_lr = 0.09e-4
+    Transformer_lr = 0.2e-4
     max_grad_norm = 1.0 
     rpe = False
     lam_gan = 0.001
@@ -173,9 +174,10 @@ if __name__ == '__main__':
     ngf = 128
     
     #####################Init Dataset ###########################
-    data_set_name = 'BLOCKS' #see utils.dataset
+    data_set_name = 'BLOCKS_MASK' #see utils.dataset
     # dataset_dir = '/home/mrunal/Documents/NYUCourses/DeepLearning/project/VPTR/data/blocks/dataset/unlabeled'
-    dataset_dir = '/scratch/ms14625/VTPR/data/blocks/dataset/unlabeled'
+    dataset_dir = '/scratch/ms14625/VTPR/data/blocks/dataset/mask_unlabeled/unlabeled'
+
     test_past_frames = 10
     test_future_frames = 11
     train_loader, val_loader, test_loader, renorm_transform = get_dataloader(data_set_name, N, dataset_dir, test_past_frames, test_future_frames, bw=False)

@@ -139,9 +139,9 @@ def NAR_show_samples(VPTR_Enc, VPTR_Dec, VPTR_Transformer, sample, save_dir):
 if __name__ == '__main__':
     set_seed(2021)
 
-    ckpt_save_dir = Path('/home/travail/xiyex/VPTR_ckpts/BAIR_NAR_MSEGDL_BPNCE01_RPE_ckpt')
-    tensorboard_save_dir = Path('/home/travail/xiyex/VPTR_ckpts/BAIR_NAR_MSEGDL_BPNCE01_RPE_tensorboard')
-    resume_AE_ckpt = Path('/home/travail/xiyex/VPTR_ckpts/BAIR_ResNetAE_MSEGDL_ckpt').joinpath('epoch_64.tar')
+    ckpt_save_dir = Path('scratch/ms14625/VTPR/VPTR_ckpts/blocks_NAR_ckpt')
+    tensorboard_save_dir = Path('scratch/ms14625/VTPR/VPTR_ckpts/blocks_NAR_tensorboard')
+    resume_AE_ckpt = '/scratch/ms14625/VTPR/VPTR_ckpts/blocks_past_10_future_11_og_ckpt/epoch_1.tar'
     #resume_ckpt = ckpt_save_dir.joinpath('epoch_88.tar')
     resume_ckpt = None
 
@@ -157,36 +157,40 @@ if __name__ == '__main__':
     start_epoch = 0
 
     summary_writer = SummaryWriter(tensorboard_save_dir.absolute().as_posix())
-    num_past_frames = 2
-    num_future_frames = 10
+    num_past_frames = 10
+    num_future_frames = 11
     encH, encW, encC = 8, 8, 528
     img_channels = 3
-    epochs = 100
-    N = 16
+    epochs = 1
+    N = 4
     #AE_lr = 2e-4
     Transformer_lr = 1e-4
     max_grad_norm = 1.0 
     TSLMA_flag = False
     rpe = True
     padding_type = 'zero'
+    ngf = 256
+    n_downsampling = 3 # OG is 3
 
     lam_gan = None #0.001
     lam_pc = 0.1
-    device = torch.device('cuda:0')
+    device = torch.device('cuda')
 
-    show_example_epochs = 10
-    save_ckpt_epochs = 2
+    show_example_epochs = 1
+    save_ckpt_epochs = 1
 
     #####################Init Dataset ###########################
-    data_set_name = 'BAIR'
-    dataset_dir = '/home/travail/xiyex/BAIR'
-    test_past_frames = 2
-    test_future_frames = 10
+    data_set_name = 'BLOCKS' #see utils.dataset
+    # dataset_dir = '/home/mrunal/Documents/NYUCourses/DeepLearning/project/VPTR/data/blocks/dataset/unlabeled'
+    dataset_dir = '/scratch/ms14625/VTPR/data/blocks/dataset/unlabeled'
+
+    test_past_frames = 10
+    test_future_frames = 11
     train_loader, val_loader, test_loader, renorm_transform = get_dataloader(data_set_name, N, dataset_dir, test_past_frames, test_future_frames)
 
     #####################Init model###########################
-    VPTR_Enc = VPTREnc(img_channels, feat_dim = encC, n_downsampling = 3, padding_type = padding_type).to(device)
-    VPTR_Dec = VPTRDec(img_channels, feat_dim = encC, n_downsampling = 3, out_layer = 'Tanh', padding_type = padding_type).to(device)
+    VPTR_Enc = VPTREnc(img_channels, ngf=ngf, feat_dim = 528, n_downsampling = n_downsampling).to(device)
+    VPTR_Dec = VPTRDec(img_channels, ngf=ngf, feat_dim = 528, n_downsampling = n_downsampling, out_layer = 'Tanh').to(device) #Sigmoid for MNIST, Tanh for KTH and BAIR
     VPTR_Enc = VPTR_Enc.eval()
     VPTR_Dec = VPTR_Dec.eval()
 
@@ -216,7 +220,7 @@ if __name__ == '__main__':
     gdl_loss = GDL(alpha = 1)
 
     #load the trained autoencoder, we initialize the discriminator from scratch, for a balanced training
-    loss_dict, start_epoch = resume_training({'VPTR_Enc': VPTR_Enc, 'VPTR_Dec': VPTR_Dec}, {}, resume_AE_ckpt, loss_name_list)
+    loss_dict, _ = resume_training({'VPTR_Enc': VPTR_Enc, 'VPTR_Dec': VPTR_Dec}, {}, resume_AE_ckpt, loss_name_list)
 
     if resume_ckpt is not None:
         loss_dict, start_epoch = resume_training({'VPTR_Transformer': VPTR_Transformer}, 
@@ -231,7 +235,8 @@ if __name__ == '__main__':
         for idx, sample in enumerate(train_loader, 0):
             iter_loss_dict = single_iter(VPTR_Enc, VPTR_Dec, VPTR_Disc, VPTR_Transformer, optimizer_T, optimizer_D, sample, device, train_flag = True)
             EpochAveMeter.iter_update(iter_loss_dict)
-            
+            break 
+
         loss_dict = EpochAveMeter.epoch_update(loss_dict, epoch, train_flag = True)
         write_summary(summary_writer, loss_dict, train_flag = True)
 
@@ -243,6 +248,7 @@ if __name__ == '__main__':
         for idx, sample in enumerate(val_loader, 0):
             iter_loss_dict = single_iter(VPTR_Enc, VPTR_Dec, VPTR_Disc, VPTR_Transformer, optimizer_T, optimizer_D, sample, device, train_flag = False)
             EpochAveMeter.iter_update(iter_loss_dict)
+            break
         loss_dict = EpochAveMeter.epoch_update(loss_dict, epoch, train_flag = False)
         write_summary(summary_writer, loss_dict, train_flag = False)
 
