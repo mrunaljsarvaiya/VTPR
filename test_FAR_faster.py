@@ -156,7 +156,7 @@ if __name__ == '__main__':
     rpe = False
     lam_gan = 0.001
     dropout = 0.1
-    device = torch.device('cpu')
+    device = torch.device('cuda')
     val_per_epochs = 1
     ngf = 128
     
@@ -218,7 +218,7 @@ if __name__ == '__main__':
 
     # Load segmentation model 
     seg_model = RR_UNET(3, 49).to(device)
-    seg_model = torch.load("/scratch/ms14625/VTPR/rrunet_checkpoint.pt", map_location='cpu').to(device)
+    seg_model = torch.load("/scratch/ms14625/VTPR/rrunet_checkpoint.pt", map_location='cuda').to(device)
 
     # unnormalize data
     past_frames, future_frames, masks =  next(iter(test_loader))
